@@ -1,0 +1,439 @@
+/* =====================================================================
+   BuddyGolf U.S. Open Pick Optimiser — engine + UI
+   ---------------------------------------------------------------------
+   VALUE MODEL (honest provenance):
+   - Real, sourced WIN odds drive everything (see data.js).
+   - Top5/Top10/Top20/Make-Cut probabilities are NOT bookmaker quotes
+     (those boards weren't machine-readable). They are DERIVED via a
+     Plackett-Luce Monte-Carlo simulation of the field from the real win
+     odds — a standard ranking model. They are labelled "≈ model" in the
+     UI and are user-editable: paste a real number and it overrides.
+   - BuddyGolf scoring (incl. the 51+ double-points rule and miss-cut
+     penalties) is applied exactly per the official rules.
+   ===================================================================== */
+
+const RULES = {
+  POS_PTS: {1:20,2:15,3:13,4:10,5:9,6:8,7:7,8:6,9:5,10:4}, // 11-15=3,16-20=2,21-30=1
+  doubleThreshold: 51,   // WGR >= 51 (incl. unranked 999) earns DOUBLE points
+  missPenalty: (wgr)=> wgr<=10 ? 6 : wgr<=50 ? 3 : 1, // points lost on missed cut
+};
+
+const STATE = {
+  players: [],
+  sims: 12000,
+  cutSize: 65,           // US Open: top 60 & ties — modelled at 65
+  fillerK: 0.8,          // scales WGR-graded strength of unpriced field
+  applyDouble: true,
+  applyPenalty: true,
+  weights: { value: 70, form: 15, major: 10, course: 5 },
+  sort: { key: 'pick', dir: -1 },
+  filters: { q:'', band:'all', valuePlays:false, hideGaps:false, minCut:0 },
+  team: new Set(),
+  selected: null,
+};
+
+/* ---------- helpers ---------- */
+const $ = (s,el=document)=>el.querySelector(s);
+const $$ = (s,el=document)=>[...el.querySelectorAll(s)];
+function flipName(lastFirst){           // "DeChambeau, Bryson" -> "Bryson DeChambeau"
+  const i = lastFirst.indexOf(',');
+  if(i<0) return lastFirst.trim();
+  return (lastFirst.slice(i+1).trim()+' '+lastFirst.slice(0,i).trim()).trim();
+}
+function pct(x){ return x==null? '—' : (x*100).toFixed(x<0.1?1:0)+'%'; }
+function num(x,d=1){ return x==null? '—' : x.toFixed(d); }
+function dec(x){ return x==null? '—' : x.toFixed(2); }
+
+/* ---------- BuddyGolf scoring ---------- */
+function positivePoints(position){
+  if(position<=10) return RULES.POS_PTS[position];
+  if(position<=15) return 3;
+  if(position<=20) return 2;
+  if(position<=30) return 1;
+  return 0;                              // made cut, outside top 30
+}
+function buddyPoints(position, wgr){
+  if(position>STATE.cutSize){            // missed cut (positional proxy)
+    return STATE.applyPenalty ? -RULES.missPenalty(wgr) : 0;
+  }
+  let pts = positivePoints(position);
+  if(STATE.applyDouble && wgr>=RULES.doubleThreshold) pts *= 2;
+  return pts;
+}
+
+/* ---------- build roster ---------- */
+function buildPlayers(){
+  const {ROSTER_RAW, DATA} = window.BG;
+  STATE.players = ROSTER_RAW.map(([wgr,lf])=>{
+    const name = flipName(lf);
+    const d = DATA[name] || {};
+    return {
+      name, wgr,
+      odds: d.odds ? {...d.odds} : {win:null,top5:null,top10:null,top20:null,makeCut:null},
+      oddsSrc: d.oddsSrc || null,
+      form: d.form || null,             // {last5:[{event,pos}], wins, sgRank, read, src}
+      history: d.history || null,       // {majorsWon:[], bestUSOpen, top10s, shinnecock, read, src}
+      override: {},                     // user-pasted real odds {top5:..}
+      model: null,                      // filled by computeModel()
+    };
+  });
+}
+
+/* ---------- Plackett-Luce Monte-Carlo ---------- */
+// Field-strength prior for players WITHOUT a sourced win price: graded by
+// real World Golf Ranking so the cut is competitive & realistic. This only
+// shapes the simulated field — these players are still shown as data gaps
+// (no displayed value), never assigned invented odds.
+function fillerWeight(wgr){
+  const w = Math.min(wgr, 900);                 // cap unranked (999)
+  return STATE.fillerK / Math.pow(w, 1.1);
+}
+function computeModel(){
+  const P = STATE.players, N = P.length, SIMS = STATE.sims, cut = STATE.cutSize;
+  const raw = P.map(p => (p.odds && p.odds.win) ? 1/p.odds.win : fillerWeight(p.wgr));
+  const sum = raw.reduce((a,b)=>a+b,0);
+  const logw = raw.map(x=>Math.log(x/sum));
+
+  const sumPts=new Float64Array(N), cWin=new Float64Array(N), cT5=new Float64Array(N),
+        cT10=new Float64Array(N), cT20=new Float64Array(N), cCut=new Float64Array(N);
+  const score=new Float64Array(N);
+  let order=[...Array(N).keys()];
+
+  for(let s=0;s<SIMS;s++){
+    for(let i=0;i<N;i++) score[i]=logw[i]-Math.log(-Math.log(Math.random()));
+    order.sort((a,b)=>score[b]-score[a]);
+    for(let pos=0;pos<N;pos++){
+      const pi=order[pos], position=pos+1;
+      if(position===1) cWin[pi]++;
+      if(position<=5)  cT5[pi]++;
+      if(position<=10) cT10[pi]++;
+      if(position<=20) cT20[pi]++;
+      if(position<=cut)cCut[pi]++;
+      sumPts[pi]+=buddyPoints(position,P[pi].wgr);
+    }
+  }
+  P.forEach((p,i)=>{
+    const hasOdds = !!(p.odds && p.odds.win);
+    p.model = hasOdds ? {
+      win:cWin[i]/SIMS, top5:cT5[i]/SIMS, top10:cT10[i]/SIMS,
+      top20:cT20[i]/SIMS, makeCut:cCut[i]/SIMS, xPts:sumPts[i]/SIMS,
+    } : null;
+  });
+  computeSubScores();
+}
+
+/* effective probability for a market: user override > derived model */
+function eff(p, key){
+  if(p.override && p.override[key]!=null) return p.override[key];
+  return p.model ? p.model[key] : null;
+}
+
+/* ---------- sub-scores (0..100) ---------- */
+function normalise(arr){ // returns fn mapping value->0..100 via min-max over finite vals
+  const v=arr.filter(x=>x!=null && isFinite(x));
+  if(!v.length) return ()=>null;
+  const lo=Math.min(...v), hi=Math.max(...v);
+  return x=> (x==null||!isFinite(x))?null : hi===lo?50 : 100*(x-lo)/(hi-lo);
+}
+function formRaw(p){
+  if(!p.form) return null;
+  // map last-5 finishes -> a 0..100 score; lower finishing position = better.
+  // 'MC' (missed cut) counts as ~78th; 'WD' (withdrawal) is skipped (not form).
+  const f=(p.form.last5||[]).map(r=> r.pos==='MC'?78 : (typeof r.pos==='number'?r.pos:null))
+                            .filter(x=>x!=null);
+  if(!f.length) return null;                          // honest gap, not guessed
+  const avg=f.reduce((a,b)=>a+b,0)/f.length;
+  return 100-Math.min(avg,80)/80*100;                 // 1st≈100, 80th≈0
+}
+function majorRaw(p){
+  if(!p.history) return null;
+  const h=p.history;
+  let s=0;
+  s += (h.majorsWon?.length||0)*30;
+  if(h.bestUSOpen?.pos) s += Math.max(0, 25-(h.bestUSOpen.pos-1)*1.2);
+  s += Math.min((h.top10s||0)*4, 30);
+  return s;
+}
+// Shinnecock-fit index, computed deterministically from VERIFIED facts:
+// a real 2018 Shinnecock finish dominates; otherwise lean on US Open pedigree.
+function finishScore(pos){ return Math.max(40, 100-9*Math.log2(pos)); } // 1→100,2→91,4→82,10→70
+function courseRaw(p){
+  if(!p.history) return null;
+  const h=p.history, s=h.sh2018;
+  const ped = h.bestUSOpen?.pos ? finishScore(h.bestUSOpen.pos)*0.9 : null; // US Open record
+  if(typeof s==='number') return Math.max(finishScore(s), ped??0);   // played '18, known finish
+  if(s==='field')  return Math.max(55, ped!=null?(55+ped)/2:55);     // made cut, finish unknown
+  if(s==='MC')     return ped!=null?Math.min(38,ped):38;             // missed cut at Shinnecock '18
+  return ped;                                                        // didn't play '18 -> US Open pedigree (null if none)
+}
+function computeSubScores(){
+  const P=STATE.players;
+  const nV=normalise(P.map(p=>p.model?p.model.xPts:null));
+  const nF=normalise(P.map(formRaw));
+  const nM=normalise(P.map(majorRaw));
+  const nC=normalise(P.map(courseRaw));
+  P.forEach(p=>{
+    p.sub={ value:nV(p.model?p.model.xPts:null), form:nF(formRaw(p)),
+            major:nM(majorRaw(p)), course:nC(courseRaw(p)) };
+  });
+}
+
+/* ---------- pick score (slider blend, re-normalised over available cats) ---------- */
+function pickScore(p){
+  const w=STATE.weights, s=p.sub||{};
+  const cats=[['value',s.value],['form',s.form],['major',s.major],['course',s.course]];
+  let wsum=0, acc=0, missing=[];
+  cats.forEach(([k,v])=>{
+    if(v==null){ if(w[k]>0) missing.push(k); return; }
+    acc+=w[k]*v; wsum+=w[k];
+  });
+  if(wsum===0) return {score:null, missing};
+  return {score:acc/wsum, missing};
+}
+
+/* ===================================================================== */
+/*  RENDER                                                               */
+/* ===================================================================== */
+function render(){
+  const tbody=$('#tbody'); tbody.innerHTML='';
+  const f=STATE.filters;
+  let rows=STATE.players.map(p=>{
+    const ps=pickScore(p);
+    return {p, pick:ps.score, missing:ps.missing};
+  });
+
+  // filters
+  rows=rows.filter(({p,pick})=>{
+    if(f.q && !p.name.toLowerCase().includes(f.q.toLowerCase())) return false;
+    if(f.band==='top50' && p.wgr>50) return false;
+    if(f.band==='value' && p.wgr<51) return false;     // 51+ "double points" pool
+    if(f.valuePlays && !(p.wgr>=51 && p.model)) return false;
+    if(f.hideGaps && !p.model) return false;
+    if(f.minCut>0){ const c=eff(p,'makeCut'); if(c==null||c*100<f.minCut) return false; }
+    return true;
+  });
+
+  // sort
+  const k=STATE.sort.key, dir=STATE.sort.dir;
+  const keyFn={
+    pick:r=>r.pick, xpts:r=>r.p.model?.xPts, win:r=>r.p.odds?.win!=null?(1/r.p.odds.win):null,
+    cut:r=>eff(r.p,'makeCut'), t5:r=>eff(r.p,'top5'), t10:r=>eff(r.p,'top10'),
+    t20:r=>eff(r.p,'top20'), wgr:r=>r.p.wgr, name:r=>r.p.name,
+    form:r=>r.p.sub?.form, major:r=>r.p.sub?.major, course:r=>r.p.sub?.course,
+  }[k]||(r=>r.pick);
+  rows.sort((a,b)=>{
+    let va=keyFn(a), vb=keyFn(b);
+    va=(va==null||Number.isNaN(va))?-Infinity:va;
+    vb=(vb==null||Number.isNaN(vb))?-Infinity:vb;
+    if(k==='name') return dir*String(keyFn(a)).localeCompare(String(keyFn(b)));
+    return dir*(va-vb);
+  });
+
+  // draw
+  rows.forEach((r,i)=>{
+    const p=r.p, inTeam=STATE.team.has(p.name);
+    const dbl = p.wgr>=51;
+    const tr=document.createElement('tr');
+    tr.className=(p.selected?'sel ':'')+(inTeam?'in-team ':'')+(!p.model?'gap ':'');
+    const probCell=(key)=>{
+      const v=eff(p,key); if(v==null) return '<td class="t gap-c">—</td>';
+      const ov=p.override&&p.override[key]!=null;
+      return `<td class="t ${ov?'ovr':'mdl'}" title="${ov?'your value':'≈ model-derived'}">${pct(v)}</td>`;
+    };
+    tr.innerHTML=`
+      <td class="rank">${i+1}</td>
+      <td class="tm"><input type="checkbox" ${inTeam?'checked':''} data-team="${p.name}"></td>
+      <td class="nm">
+        <span class="pn">${p.name}</span>
+        ${dbl?'<span class="b2x" title="WGR 51+ — earns DOUBLE BuddyGolf points">2×</span>':''}
+        ${!p.model?'<span class="bgap" title="No sourced win odds — value cannot be modelled">no market</span>':''}
+        ${r.missing&&r.missing.length?`<span class="bmiss" title="Missing data for: ${r.missing.join(', ')} — blend uses available categories only">partial</span>`:''}
+      </td>
+      <td class="wgr">${p.wgr===999?'—':p.wgr}</td>
+      <td class="t">${p.odds?.win?dec(p.odds.win):'<span class=gap-c>—</span>'}</td>
+      ${probCell('top5')}${probCell('top10')}${probCell('top20')}${probCell('makeCut')}
+      <td class="xp ${p.model&&p.model.xPts<0?'neg':''}">${p.model?num(p.model.xPts,1):'<span class=gap-c>—</span>'}</td>
+      <td class="ps">${r.pick==null?'<span class=gap-c>—</span>':`<div class="psbar"><span style="width:${Math.max(2,r.pick)}%"></span><b>${num(r.pick,0)}</b></div>`}</td>
+    `;
+    tr.addEventListener('click',e=>{ if(e.target.dataset.team!==undefined)return; openDetail(p); });
+    tbody.appendChild(tr);
+  });
+
+  $('#shown').textContent=rows.length;
+  $$('input[data-team]').forEach(cb=>cb.addEventListener('change',e=>{
+    toggleTeam(e.target.dataset.team, e.target.checked);
+  }));
+  renderTeam();
+  paintSortHeaders();
+}
+
+function paintSortHeaders(){
+  $$('#tbl thead th[data-key]').forEach(th=>{
+    th.classList.toggle('sort-on', th.dataset.key===STATE.sort.key);
+    const a=th.querySelector('.arr'); if(a) a.textContent=
+      th.dataset.key===STATE.sort.key?(STATE.sort.dir<0?'▾':'▴'):'';
+  });
+}
+
+/* ---------- team builder ---------- */
+function toggleTeam(name,on){
+  if(on){ if(STATE.team.size>=12 && !STATE.team.has(name)){ flash('Team is full (12). Remove one first.'); render(); return;} STATE.team.add(name);}
+  else STATE.team.delete(name);
+  render();
+}
+function renderTeam(){
+  const box=$('#teamlist'); box.innerHTML='';
+  let total=0, dbls=0, gaps=0;
+  [...STATE.team].map(n=>STATE.players.find(p=>p.name===n)).forEach(p=>{
+    if(!p) return;
+    if(p.model) total+=p.model.xPts; else gaps++;
+    if(p.wgr>=51) dbls++;
+    const chip=document.createElement('div'); chip.className='chip';
+    chip.innerHTML=`<span>${p.name}</span> <b>${p.model?num(p.model.xPts,1):'—'}</b> <i data-rm="${p.name}">✕</i>`;
+    box.appendChild(chip);
+  });
+  $('#tcount').textContent=STATE.team.size;
+  $('#ttotal').textContent=total.toFixed(1);
+  $('#tdbl').textContent=dbls;
+  $('#tgap').textContent=gaps;
+  $('#tcount').className=STATE.team.size===12?'ok':STATE.team.size>12?'bad':'';
+  $$('#teamlist [data-rm]').forEach(x=>x.addEventListener('click',e=>{
+    e.stopPropagation(); toggleTeam(e.target.dataset.rm,false);
+  }));
+}
+function autoPick(){
+  const ranked=STATE.players.map(p=>({p,s:pickScore(p).score}))
+    .filter(x=>x.s!=null && x.p.model)
+    .sort((a,b)=>b.s-a.s);
+  STATE.team=new Set(ranked.slice(0,12).map(x=>x.p.name));
+  flash('Auto-picked the top 12 by your current weights.');
+  render();
+}
+
+/* ---------- detail drawer ---------- */
+function openDetail(p){
+  STATE.players.forEach(x=>x.selected=false); p.selected=true;
+  const d=$('#drawer'); d.classList.add('open');
+  const m=p.model;
+  const oddsRow=(label,key,real)=>{
+    const isWin = key==='win';
+    const v = isWin ? (p.model?p.model.win:null) : eff(p,key);
+    const ovr = !isWin && p.override && p.override[key]!=null;
+    const realCell = isWin ? (p.odds?.win!=null?dec(p.odds.win):'<span class=gap-c>—</span>')
+                           : (real!=null?dec(real):'<span class=gap-c>—</span>');
+    const input = isWin
+      ? `<input class="ovin" data-k="win" data-odds="1" placeholder="odds e.g.41" value="${p.odds?.win??''}">`
+      : `<input class="ovin" data-k="${key}" placeholder="real %" value="${ovr?(p.override[key]*100):''}">`;
+    return `<tr><td>${label}</td><td>${realCell}</td>
+      <td class="${ovr?'ovr':'mdl'}">${v==null?'—':pct(v)} ${v!=null?`<small>${ovr?'(yours)':'≈model'}</small>`:''}</td>
+      <td>${input}</td></tr>`;
+  };
+  const form=p.form, hist=p.history;
+  d.innerHTML=`
+    <button id="dclose">✕</button>
+    <h2>${p.name} ${p.wgr>=51?'<span class="b2x">2× points</span>':''}</h2>
+    <div class="dmeta">WGR ${p.wgr===999?'unranked':p.wgr}
+      · miss-cut penalty <b>${STATE.applyPenalty?('-'+RULES.missPenalty(p.wgr)):'off'}</b>
+      ${p.wgr>=51?'· <b>double points on every finish</b>':''}</div>
+
+    <div class="dcard">
+      <h3>📈 Projected BuddyGolf points <span class="hx">${m?num(m.xPts,2):'no model'}</span></h3>
+      <p class="fine">Expected points from a ${STATE.sims.toLocaleString()}-sim Plackett-Luce model built on the real win odds, with the 51+ doubling & miss-cut penalty applied.</p>
+      <table class="dt">
+        <tr><th>Market</th><th>Real odds</th><th>Probability</th><th>Override (real %)</th></tr>
+        ${oddsRow('Win','win')}
+        ${oddsRow('Top 5','top5',p.odds?.top5)}
+        ${oddsRow('Top 10','top10',p.odds?.top10)}
+        ${oddsRow('Top 20','top20',p.odds?.top20)}
+        ${oddsRow('Make cut','makeCut',p.odds?.makeCut)}
+      </table>
+      <p class="src">Win odds source: ${p.oddsSrc||'<span class=gap-c>none — value not modelled</span>'}</p>
+    </div>
+
+    <div class="dcard">
+      <h3>🔥 Season form <span class="hx">${p.sub?.form!=null?num(p.sub.form,0):'—'}</span></h3>
+      ${form? `<p>${form.read||''}</p>
+        <p class="fine">Last 5: ${(form.last5||[]).map(r=>`${r.event||''} <b>${r.pos}</b>`).join(' · ')||'—'}
+        ${form.wins?` · <b>${form.wins}</b> win(s) 2026`:''}${form.sgRank?` · SG rank ${form.sgRank}`:''}</p>
+        <p class="src">Source: ${form.src||'—'}</p>`
+        : `<p class="gap-c">No verified 2026 form yet — gap (not guessed).</p>`}
+    </div>
+
+    <div class="dcard">
+      <h3>🏆 Major pedigree <span class="hx">${p.sub?.major!=null?num(p.sub.major,0):'—'}</span>
+        &nbsp;⛳ Shinnecock fit <span class="hx">${p.sub?.course!=null?num(p.sub.course,0):'—'}</span></h3>
+      ${hist? `<p>${hist.read||''}</p>
+        <p class="fine">Majors: <b>${(hist.majorsWon||[]).map(w=>w.name+' '+w.year).join(', ')||'none'}</b>
+        · Best U.S. Open: ${hist.bestUSOpen?(hist.bestUSOpen.pos+' ('+hist.bestUSOpen.year+')'):'—'}
+        · Major top-10s: ${hist.top10s??'—'}</p>
+        <p class="fine">Shinnecock: ${hist.shinnecock||'—'}</p>
+        <p class="src">Source: ${hist.src||'—'}</p>`
+        : `<p class="gap-c">No verified major/Shinnecock history yet — gap (not guessed).</p>`}
+    </div>
+  `;
+  $('#dclose').onclick=()=>{ d.classList.remove('open'); p.selected=false; render(); };
+  $$('.ovin',d).forEach(inp=>inp.addEventListener('change',e=>{
+    const k=e.target.dataset.k, val=parseFloat(e.target.value);
+    if(e.target.dataset.odds){                       // win-odds entry (decimal) -> activates model
+      if(e.target.value===''){ p.odds.win=null; p.oddsSrc='(cleared)'; }
+      else if(!Number.isNaN(val)&&val>1){ p.odds.win=val; p.oddsSrc='✎ your manual entry'; }
+      flash('Re-simulating field with your odds…'); recalcAll(); openDetail(p); return;
+    }
+    if(e.target.value===''){ delete p.override[k]; }
+    else if(!Number.isNaN(val)) p.override[k]=Math.min(1,Math.max(0,val/100));
+    computeSubScores(); render(); openDetail(p);
+  }));
+  render();
+}
+
+/* ---------- misc UI ---------- */
+let flashT;
+function flash(msg){
+  const f=$('#flash'); f.textContent=msg; f.classList.add('show');
+  clearTimeout(flashT); flashT=setTimeout(()=>f.classList.remove('show'),2600);
+}
+function recalcAll(){
+  $('#calc').classList.add('on');
+  setTimeout(()=>{ computeModel(); render(); $('#calc').classList.remove('on'); },20);
+}
+
+/* ---------- wire up ---------- */
+function init(){
+  buildPlayers();
+  window.BG.FIELD_META.lastUpdated=new Date().toISOString().slice(0,16).replace('T',' ');
+  $('#meta').innerHTML=`<b>${window.BG.FIELD_META.event}</b> · ${window.BG.FIELD_META.course}
+    · ${window.BG.FIELD_META.dates} · field ${STATE.players.length}`;
+
+  // sliders
+  const ws=[['wValue','value'],['wForm','form'],['wMajor','major'],['wCourse','course']];
+  ws.forEach(([id,key])=>{
+    const el=$('#'+id);
+    el.value=STATE.weights[key];
+    $('#'+id+'v').textContent=STATE.weights[key];
+    el.addEventListener('input',()=>{ STATE.weights[key]=+el.value; $('#'+id+'v').textContent=el.value; render(); });
+  });
+  // toggles
+  $('#tgDouble').checked=STATE.applyDouble;
+  $('#tgPenalty').checked=STATE.applyPenalty;
+  $('#tgDouble').addEventListener('change',e=>{STATE.applyDouble=e.target.checked;recalcAll();});
+  $('#tgPenalty').addEventListener('change',e=>{STATE.applyPenalty=e.target.checked;recalcAll();});
+  // filters
+  $('#q').addEventListener('input',e=>{STATE.filters.q=e.target.value;render();});
+  $('#band').addEventListener('change',e=>{STATE.filters.band=e.target.value;render();});
+  $('#valuePlays').addEventListener('change',e=>{STATE.filters.valuePlays=e.target.checked;render();});
+  $('#hideGaps').addEventListener('change',e=>{STATE.filters.hideGaps=e.target.checked;render();});
+  $('#minCut').addEventListener('input',e=>{STATE.filters.minCut=+e.target.value;$('#minCutv').textContent=e.target.value+'%';render();});
+  // sort headers
+  $$('#tbl thead th[data-key]').forEach(th=>th.addEventListener('click',()=>{
+    const k=th.dataset.key;
+    if(STATE.sort.key===k) STATE.sort.dir*=-1;
+    else { STATE.sort.key=k; STATE.sort.dir = k==='name'||k==='wgr'?1:-1; }
+    render();
+  }));
+  // team buttons
+  $('#autopick').addEventListener('click',autoPick);
+  $('#clearteam').addEventListener('click',()=>{STATE.team.clear();render();});
+
+  recalcAll();
+}
+document.addEventListener('DOMContentLoaded',init);

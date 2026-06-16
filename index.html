@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BuddyGolf · 2026 U.S. Open Pick Optimiser</title>
+<style>
+:root{
+  --bg:#0c1411; --panel:#121d18; --panel2:#16241d; --line:#21362b;
+  --ink:#e8f1ea; --mut:#8aa394; --fai:#a9c2b3;
+  --grn:#3fb56b; --grn2:#2f8f53; --gold:#e7b94b; --red:#e2614d; --blu:#5fa8d3;
+  --shadow:0 10px 30px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:radial-gradient(1200px 600px at 80% -10%,#13241b 0,var(--bg) 55%) fixed;color:var(--ink)}
+a{color:var(--grn)}
+.wrap{max-width:1500px;margin:0 auto;padding:18px 20px 80px}
+
+/* header */
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:14px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(145deg,var(--grn),var(--grn2));
+  display:grid;place-items:center;font-size:22px;box-shadow:var(--shadow)}
+h1{font-size:20px;margin:0;letter-spacing:.2px}
+h1 small{display:block;font-size:12px;color:var(--mut);font-weight:500;letter-spacing:.3px}
+#meta{font-size:12.5px;color:var(--fai);text-align:right}
+.note{font-size:11.5px;color:var(--mut);max-width:430px;text-align:right;margin-top:3px}
+
+/* layout */
+.cols{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start}
+@media(max-width:1080px){.cols{grid-template-columns:1fr}}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mut);margin:0;
+  padding:13px 15px;border-bottom:1px solid var(--line)}
+.pad{padding:14px 15px}
+
+/* sliders */
+.slider{margin:13px 0}
+.slider .lab{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:12.5px}
+.slider .lab b{font-variant-numeric:tabular-nums;color:var(--ink);background:var(--panel2);
+  border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:12px}
+.slider .ico{color:var(--fai)}
+input[type=range]{-webkit-appearance:none;width:100%;height:6px;border-radius:6px;
+  background:linear-gradient(90deg,var(--grn2),var(--grn));outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;
+  background:#fff;border:3px solid var(--grn);cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+.hint{font-size:11px;color:var(--mut);margin:2px 0 0}
+
+.tog{display:flex;align-items:center;gap:9px;margin:11px 0;font-size:12.5px;color:var(--fai)}
+.tog input{width:16px;height:16px;accent-color:var(--grn)}
+.tog b{color:var(--ink)}
+
+.fil{display:flex;flex-direction:column;gap:10px}
+.fil input[type=text],.fil select{width:100%;padding:8px 10px;background:var(--panel2);border:1px solid var(--line);
+  border-radius:9px;color:var(--ink);font-size:13px}
+.fil .row{display:flex;gap:10px;align-items:center;justify-content:space-between;font-size:12.5px;color:var(--fai)}
+
+/* team */
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.kpi{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px;text-align:center}
+.kpi b{display:block;font-size:19px;font-variant-numeric:tabular-nums}
+.kpi span{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px}
+#tcount.ok{color:var(--grn)} #tcount.bad{color:var(--red)}
+#teamlist{display:flex;flex-direction:column;gap:6px;max-height:230px;overflow:auto}
+.chip{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);
+  border-radius:9px;padding:6px 9px;font-size:12.5px}
+.chip span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip b{font-variant-numeric:tabular-nums;color:var(--grn)}
+.chip i{cursor:pointer;color:var(--mut);font-style:normal}.chip i:hover{color:var(--red)}
+.btn{display:block;width:100%;text-align:center;padding:9px;border-radius:9px;border:1px solid var(--line);
+  background:var(--panel2);color:var(--ink);font-size:12.5px;cursor:pointer;margin-top:8px}
+.btn.primary{background:linear-gradient(145deg,var(--grn),var(--grn2));border-color:var(--grn2);font-weight:600}
+.btn:hover{filter:brightness(1.08)}
+
+/* table */
+.tablecard{overflow:hidden}
+.thead{display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-bottom:1px solid var(--line)}
+.thead .t{font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mut)}
+.thead .r{font-size:11.5px;color:var(--fai)}
+.scroll{overflow:auto;max-height:74vh}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{position:sticky;top:0;background:#0f1814;z-index:2;color:var(--mut);font-weight:600;font-size:11px;
+  text-transform:uppercase;letter-spacing:.5px;padding:9px 8px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line);cursor:pointer;user-select:none}
+thead th[data-key]:hover{color:var(--ink)}
+thead th.sort-on{color:var(--grn)}
+thead th .arr{display:inline-block;width:10px;color:var(--grn)}
+th.l,td.l{text-align:left}
+tbody td{padding:8px;text-align:right;border-bottom:1px solid #18271f;font-variant-numeric:tabular-nums;white-space:nowrap}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:#15231b}
+tbody tr.sel{background:#192c20;box-shadow:inset 3px 0 0 var(--grn)}
+tbody tr.in-team{background:#142a1d}
+tbody tr.gap{opacity:.62}
+td.rank{color:var(--mut);text-align:center;width:34px}
+td.tm{text-align:center;width:30px}td.tm input{accent-color:var(--grn);width:15px;height:15px}
+td.nm{text-align:left;white-space:normal;min-width:180px}
+.pn{font-weight:600}
+.wgr{color:var(--fai)}
+.t.mdl{color:var(--blu)} .t.ovr{color:var(--gold);font-weight:600}
+.t .gap-c,.gap-c{color:#5b6f63}
+.xp{font-weight:700;color:var(--grn)} .xp.neg{color:var(--red)}
+.b2x{display:inline-block;font-size:10px;font-weight:700;color:#1a130a;background:var(--gold);
+  border-radius:5px;padding:0 5px;margin-left:6px;vertical-align:middle}
+.bgap{display:inline-block;font-size:10px;color:var(--mut);border:1px solid var(--line);border-radius:5px;padding:0 5px;margin-left:6px}
+.bmiss{display:inline-block;font-size:10px;color:var(--blu);border:1px solid #244;border-radius:5px;padding:0 5px;margin-left:6px}
+.psbar{position:relative;height:18px;width:88px;margin-left:auto;background:var(--panel2);border-radius:5px;overflow:hidden}
+.psbar span{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--grn2),var(--grn));opacity:.55}
+.psbar b{position:relative;display:block;text-align:center;line-height:18px;font-size:11.5px}
+
+/* drawer */
+#drawer{position:fixed;top:0;right:-560px;width:540px;max-width:94vw;height:100vh;background:var(--panel);
+  border-left:1px solid var(--line);box-shadow:-20px 0 50px rgba(0,0,0,.5);transition:right .25s ease;
+  overflow:auto;z-index:50;padding:22px}
+#drawer.open{right:0}
+#dclose{position:absolute;top:14px;right:14px;background:var(--panel2);border:1px solid var(--line);
+  color:var(--ink);border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:15px}
+#drawer h2{margin:2px 0 4px;font-size:20px}
+.dmeta{color:var(--fai);font-size:12.5px;margin-bottom:14px}
+.dcard{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:13px 14px;margin-bottom:12px}
+.dcard h3{margin:0 0 8px;font-size:13.5px;display:flex;justify-content:space-between;align-items:center}
+.hx{font-variant-numeric:tabular-nums;color:var(--grn);background:var(--panel);border:1px solid var(--line);
+  border-radius:6px;padding:1px 8px;font-size:12.5px}
+.dcard p{margin:5px 0}
+.fine{font-size:12px;color:var(--fai)} .src{font-size:11px;color:var(--mut);margin-top:8px}
+table.dt{width:100%;border-collapse:collapse;margin-top:6px;font-size:12.5px}
+table.dt th{color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)}
+table.dt td{padding:5px 6px;border-bottom:1px solid #1b2a22}
+table.dt td.mdl{color:var(--blu)} table.dt td.ovr{color:var(--gold)}
+table.dt small{color:var(--mut)}
+.ovin{width:72px;padding:4px 6px;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--gold);font-size:12px}
+
+/* misc */
+#flash{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;
+  background:#0f1814;border:1px solid var(--grn2);color:var(--ink);padding:10px 16px;border-radius:10px;
+  box-shadow:var(--shadow);transition:.25s;z-index:60;font-size:13px;pointer-events:none}
+#flash.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#calc{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#0f1814;border:1px solid var(--line);
+  color:var(--fai);font-size:12px;padding:6px 13px;border-radius:20px;opacity:0;transition:.2s;z-index:60}
+#calc.on{opacity:1}
+.legend{font-size:11px;color:var(--mut);padding:9px 15px;border-top:1px solid var(--line);display:flex;gap:16px;flex-wrap:wrap}
+.legend b{color:var(--blu)}.legend i{color:var(--gold);font-style:normal}.legend u{color:var(--fai);text-decoration:none}
+.banner{background:linear-gradient(90deg,#1a2c20,#142019);border:1px solid var(--line);border-radius:12px;
+  padding:11px 15px;font-size:12.5px;color:var(--fai);margin-bottom:14px}
+.banner b{color:var(--gold)}
+</style>
+</head>
+<body>
+<div id="calc">⛳ simulating field…</div>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">⛳</div>
+      <div><h1>BuddyGolf Pick Optimiser <small>2026 U.S. Open · value engine</small></h1></div>
+    </div>
+    <div>
+      <div id="meta"></div>
+      <div class="note">Win odds are real &amp; sourced. Top-5/10/20/cut % are <b style="color:var(--blu)">≈ model-derived</b> from those odds (boards weren't machine-readable) — editable per player. Blanks are honest data gaps, never guesses.</div>
+    </div>
+  </header>
+
+  <div class="banner">
+    💡 <b>How value works here:</b> the engine simulates the whole field 12,000× from the real win odds, scores every finish by BuddyGolf rules, and applies the <b>WGR 51+ double-points</b> rule + miss-cut penalties. That's the <u style="color:var(--grn)">Projected Points (xP)</u> column. Your sliders then blend that with Form, Major pedigree &amp; Shinnecock fit into a 0–100 <b>Pick Score</b>.
+  </div>
+
+  <div class="cols">
+    <!-- CONTROL COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="card">
+        <h2>⚖️ Category weights</h2>
+        <div class="pad">
+          <div class="slider"><div class="lab"><span class="ico">💰 Betting value (xP)</span><b id="wValuev">70</b></div>
+            <input type="range" id="wValue" min="0" max="100"><div class="hint">Expected BuddyGolf points from the odds model.</div></div>
+          <div class="slider"><div class="lab"><span class="ico">🔥 Season form</span><b id="wFormv">15</b></div>
+            <input type="range" id="wForm" min="0" max="100"><div class="hint">2026 recent finishes (hot vs cold).</div></div>
+          <div class="slider"><div class="lab"><span class="ico">🏆 Major pedigree</span><b id="wMajorv">10</b></div>
+            <input type="range" id="wMajor" min="0" max="100"><div class="hint">Majors won, US Open record, top-10 count.</div></div>
+          <div class="slider"><div class="lab"><span class="ico">⛳ Shinnecock fit</span><b id="wCoursev">5</b></div>
+            <input type="range" id="wCourse" min="0" max="100"><div class="hint">2018 Shinnecock result + US Open history.</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📐 BuddyGolf rules</h2>
+        <div class="pad">
+          <label class="tog"><input type="checkbox" id="tgDouble"><span><b>51+ double points</b> — WGR 51+ &amp; unranked earn 2× on every finish</span></label>
+          <label class="tog"><input type="checkbox" id="tgPenalty"><span><b>Miss-cut penalty</b> — −6 (top 10) / −3 (11–50) / −1 (51+)</span></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🔎 Filter</h2>
+        <div class="pad fil">
+          <input type="text" id="q" placeholder="Search player…">
+          <select id="band">
+            <option value="all">All players</option>
+            <option value="top50">WGR top 50 only</option>
+            <option value="value">WGR 51+ (double-points pool)</option>
+          </select>
+          <label class="tog"><input type="checkbox" id="valuePlays"><span>⭐ 51+ value plays w/ odds only</span></label>
+          <label class="tog"><input type="checkbox" id="hideGaps"><span>Hide players with no market</span></label>
+          <div class="row"><span>Min make-cut %</span><b id="minCutv">0%</b></div>
+          <input type="range" id="minCut" min="0" max="95" value="0">
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🎯 My 12 · <span id="tcount">0</span>/12</h2>
+        <div class="pad">
+          <div class="kpis">
+            <div class="kpi"><b id="ttotal">0.0</b><span>Proj. pts</span></div>
+            <div class="kpi"><b id="tdbl">0</b><span>2× picks</span></div>
+            <div class="kpi"><b id="tgap">0</b><span>no model</span></div>
+          </div>
+          <div id="teamlist"></div>
+          <button class="btn primary" id="autopick">⚡ Auto-pick best 12</button>
+          <button class="btn" id="clearteam">Clear team</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABLE COLUMN -->
+    <div class="card tablecard">
+      <div class="thead"><span class="t">Value leaderboard</span><span class="r"><b id="shown">0</b> players · click a row for the full dossier</span></div>
+      <div class="scroll">
+        <table id="tbl">
+          <thead><tr>
+            <th>#</th><th>✓</th>
+            <th class="l" data-key="name">Player <span class="arr"></span></th>
+            <th data-key="wgr">WGR <span class="arr"></span></th>
+            <th data-key="win">Win odds <span class="arr"></span></th>
+            <th data-key="t5">Top5 <span class="arr"></span></th>
+            <th data-key="t10">Top10 <span class="arr"></span></th>
+            <th data-key="t20">Top20 <span class="arr"></span></th>
+            <th data-key="cut">Make cut <span class="arr"></span></th>
+            <th data-key="xpts">Proj. pts <span class="arr"></span></th>
+            <th data-key="pick">Pick score <span class="arr">▾</span></th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="legend">
+        <span><b>blue %</b> = model-derived</span>
+        <span><span style="color:var(--gold)">gold %</span> = your override</span>
+        <span><i>2×</i> = 51+ double points</span>
+        <span><u>—</u> = data gap (not guessed)</span>
+        <span>Proj. pts = expected BuddyGolf points</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="drawer"></div>
+<div id="flash"></div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
