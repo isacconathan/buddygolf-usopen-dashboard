@@ -73,6 +73,7 @@ function buildPlayers(){
       oddsSrc: d.oddsSrc || null,
       form: d.form || null,             // {last5:[{event,pos}], wins, sgRank, read, src}
       history: d.history || null,       // {majorsWon:[], bestUSOpen, top10s, shinnecock, read, src}
+      intel: d.intel || null,           // {text, date, src, flag} colour/news note
       override: {},                     // user-pasted real odds {top5:..}
       model: null,                      // filled by computeModel()
     };
@@ -246,6 +247,7 @@ function render(){
       <td class="nm">
         <span class="pn">${p.name}</span>
         ${dbl?'<span class="b2x" title="WGR 51+ — earns DOUBLE BuddyGolf points">2×</span>':''}
+        ${p.intel?`<span class="bnews ${p.intel.flag==='injury'?'inj':''}" title="${(p.intel.text||'').replace(/"/g,'&quot;')}">${p.intel.flag==='injury'?'⚕':'📋'}</span>`:''}
         ${!p.model?'<span class="bgap" title="No sourced win odds — value cannot be modelled">no market</span>':''}
         ${r.missing&&r.missing.length?`<span class="bmiss" title="Missing data for: ${r.missing.join(', ')} — blend uses available categories only">partial</span>`:''}
       </td>
@@ -350,6 +352,11 @@ function openDetail(p){
       <p class="src">Win odds source: ${p.oddsSrc||'<span class=gap-c>none — value not modelled</span>'}</p>
     </div>
 
+    ${p.intel? `<div class="dcard" style="border-color:${p.intel.flag==='injury'?'var(--red)':'var(--line)'}">
+      <h3>📋 Intel &amp; news</h3>
+      <p>${p.intel.flag==='injury'?'⚕️ ':''}${p.intel.text}</p>
+      <p class="src">${p.intel.date||''}${p.intel.src?(' · '+p.intel.src):''}</p></div>` : ''}
+
     <div class="dcard">
       <h3>🔥 Season form <span class="hx">${p.sub?.form!=null?num(p.sub.form,0):'—'}</span></h3>
       ${form? `<p>${form.read||''}</p>
@@ -397,6 +404,43 @@ function recalcAll(){
   setTimeout(()=>{ computeModel(); render(); $('#calc').classList.remove('on'); },20);
 }
 
+/* ---------- live odds auto-refresh ---------- */
+const REFRESH = { on:true, everyMs:5*60*1000, timer:null, lastCheck:null };
+async function checkForNewData(manual){
+  REFRESH.lastCheck=Date.now(); updateDataCard();
+  let remote=null, reachable=false;
+  try{
+    const r=await fetch('data.js?cb='+Date.now(),{cache:'no-store'});
+    if(r.ok){ reachable=true; const t=await r.text();
+      const m=t.match(/oddsCapturedAt:\s*"([^"]+)"/); remote=m?m[1]:null; }
+  }catch(e){ reachable=false; }
+  const cur=window.BG.FIELD_META.oddsCapturedAt;
+  if(remote && remote!==cur) showUpdateBanner(remote);
+  else if(manual) flash(reachable ? 'Odds are current ('+cur+').'
+    : 'Auto-check works on the hosted site; a local file can’t re-fetch data.js.');
+  updateDataCard(); return remote;
+}
+function showUpdateBanner(remote){
+  let b=document.getElementById('updbar');
+  if(!b){ b=document.createElement('div'); b.id='updbar'; document.body.appendChild(b); }
+  b.innerHTML=`🆕 New odds available (captured ${remote}) — <button id="loadnew">Load them</button>`;
+  b.classList.add('show');
+  document.getElementById('loadnew').onclick=()=>location.reload();
+}
+function setAutoRefresh(on){
+  REFRESH.on=on;
+  if(REFRESH.timer){ clearInterval(REFRESH.timer); REFRESH.timer=null; }
+  if(on) REFRESH.timer=setInterval(()=>checkForNewData(false), REFRESH.everyMs);
+  updateDataCard();
+}
+function agoStr(t){ if(!t)return 'not yet'; const s=Math.round((Date.now()-t)/1000);
+  return s<60?s+'s ago':Math.round(s/60)+'m ago'; }
+function updateDataCard(){
+  const el=$('#dataInfo'); if(!el) return;
+  el.innerHTML=`Odds captured <b>${window.BG.FIELD_META.oddsCapturedAt}</b><br>`
+    +`Auto-check ${REFRESH.on?'<b style="color:var(--grn)">on</b>':'<span style="color:var(--mut)">off</span>'} · checked ${agoStr(REFRESH.lastCheck)}`;
+}
+
 /* ---------- wire up ---------- */
 function init(){
   buildPlayers();
@@ -433,6 +477,11 @@ function init(){
   // team buttons
   $('#autopick').addEventListener('click',autoPick);
   $('#clearteam').addEventListener('click',()=>{STATE.team.clear();render();});
+  // live odds auto-refresh
+  $('#tgAuto').checked=REFRESH.on;
+  $('#tgAuto').addEventListener('change',e=>setAutoRefresh(e.target.checked));
+  $('#refreshBtn').addEventListener('click',()=>checkForNewData(true));
+  setAutoRefresh(REFRESH.on); updateDataCard();
 
   recalcAll();
 }

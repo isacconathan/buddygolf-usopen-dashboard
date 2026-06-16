@@ -136,6 +136,14 @@ table.dt small{color:var(--mut)}
   background:#0f1814;border:1px solid var(--grn2);color:var(--ink);padding:10px 16px;border-radius:10px;
   box-shadow:var(--shadow);transition:.25s;z-index:60;font-size:13px;pointer-events:none}
 #flash.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#updbar{position:fixed;top:0;left:0;right:0;background:linear-gradient(90deg,var(--grn2),var(--grn));
+  color:#06120b;text-align:center;padding:10px;font-weight:600;z-index:70;
+  transform:translateY(-100%);transition:.25s;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+#updbar.show{transform:translateY(0)}
+#updbar button{margin-left:10px;background:#06120b;color:#eafff1;border:0;border-radius:7px;
+  padding:5px 12px;cursor:pointer;font-weight:600}
+.bnews{display:inline-block;font-size:11px;margin-left:6px;cursor:help}
+.bnews.inj{color:var(--red)}
 #calc{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#0f1814;border:1px solid var(--line);
   color:var(--fai);font-size:12px;padding:6px 13px;border-radius:20px;opacity:0;transition:.2s;z-index:60}
 #calc.on{opacity:1}
@@ -216,6 +224,15 @@ table.dt small{color:var(--mut)}
           <div id="teamlist"></div>
           <button class="btn primary" id="autopick">⚡ Auto-pick best 12</button>
           <button class="btn" id="clearteam">Clear team</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🔄 Live odds</h2>
+        <div class="pad">
+          <div id="dataInfo" class="hint" style="font-size:12px;line-height:1.7"></div>
+          <label class="tog" style="margin-top:10px"><input type="checkbox" id="tgAuto"><span>Auto-check for new odds (every 5 min)</span></label>
+          <button class="btn" id="refreshBtn">↻ Check for new odds now</button>
         </div>
       </div>
     </div>

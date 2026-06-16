@@ -15,7 +15,8 @@ const FIELD_META = {
   note: "BuddyGolf app labels the venue 'Oakmont' but the real 2026 U.S. Open "
       + "is at Shinnecock Hills; course-fit is modelled on Shinnecock per user.",
   oddsPrimarySource: "sportingbet.co.za (event 17704600), cross-checked vs news books",
-  lastUpdated: null, // set when data load completes
+  oddsCapturedAt: "2026-06-16 15:10", // when odds were scraped — bump on every refresh
+  lastUpdated: null, // set when the page loads the data
 };
 
 /* Full field as (WGR, "Surname, First"). 999 = unranked/qualifier.
@@ -297,6 +298,144 @@ const FORM = {
   "Andrew Novak":      F([[7,'Farmers']],0,"Cooling — negative recent SG Total.",null),
 };
 for(const k in FORM){ DATA[k]=Object.assign(DATA[k]||{}, FORM[k]); }
+
+/* ---------------------------------------------------------------------
+   PLAYER INTEL — recent colour/news (verified, sourced — intel agent).
+   flag:'injury' shows a red ⚕ marker. One verified sentence each;
+   players with nothing noteworthy are simply omitted (no padding).
+   --------------------------------------------------------------------- */
+function I(text, date, src, flag){ return {intel:{text,date,src,flag:flag||null}}; }
+const INTEL = {
+  "Scottie Scheffler": I("+550 favourite chasing the career Grand Slam on his 30th birthday weekend; winless since January but still the field's best tee-to-green.","Jun 2026","CBS"),
+  "Rory McIlroy": I("Says his driving 'isn't where he wants it' but is happy with irons/short game; scouted Shinnecock after T12 at Memorial.","Jun 2026","Golf Channel"),
+  "Cameron Young": I("Red-hot — 2026 wins at THE PLAYERS and the Cadillac (by six over Scheffler); risen to World No. 3.","2026","PGA Tour"),
+  "Matt Fitzpatrick": I("Arguably the hottest player in golf — three 2026 wins plus a runner-up (closing 64) at the Canadian Open last week.","Jun 14 2026","Yahoo"),
+  "Russell Henley": I("Won the Charles Schwab Challenge at Colonial in a playoff; up to World No. 11.","May 31 2026","PGA Tour"),
+  "Tommy Fleetwood": I("Five-plus top-10s in 2026 but still chasing a first win since last August's Tour Championship breakthrough.","Jun 2026","Fox Sports"),
+  "Justin Rose": I("Won Farmers in a record 23-under (Feb) and made a late charge to T10 at the PGA.","2026","Fox Sports"),
+  "Jon Rahm": I("PGA runner-up; used the LIV break to scout Shinnecock — but is 0-for-12 in majors since joining LIV.","Jun 2026","NBC"),
+  "J.J. Spaun": I("Defending champ; says chasing being a 'perfect golfer' hurt him — now back to his title-winning mindset.","Jun 2026","Yahoo/AP"),
+  "Collin Morikawa": I("Lingering back spasms (WD'd PLAYERS after one hole; also Texas Open & Truist) — calls it a 'trust factor'.","Mar–May 2026","CBS","injury"),
+  "Chris Gotterup": I("Two 2026 wins (Sony, and WM Phoenix in a playoff over Matsuyama); career-high No. 17.","Jan–Feb 2026","CBS"),
+  "Xander Schauffele": I("Won The American Express to open 2026; has never finished worse than T14 in his US Open career.","2026","Today's Golfer"),
+  "Ludvig Åberg": I("Five top-fives in nine starts incl. T4 at the PGA — but still 0-for-10 in majors.","May–Jun 2026","CBS"),
+  "Aaron Rai": I("Won the 2026 PGA Championship — his first major, and the first Englishman to win it since 1919.","May 17 2026","ESPN"),
+  "Ben Griffin": I("More mixed than his 2025 breakout (0 wins, 3 top-10s); lost Colonial by one to Henley.","2026","AOL"),
+  "Justin Thomas": I("In via PGA win exemption; griped that practice-round wait times have 'gotten terrible' at majors.","Jun 15 2026","Golf Channel"),
+  "Robert MacIntyre": I("Run of missed cuts (Masters, PGA, Memorial) since the birth of first child Findlay — 'life going on,' says McGinley.","Jun 2026","DailyClubGolf"),
+  "Si Woo Kim": I("Career-best season (No. 18) with a CJ Cup runner-up and T10 Memorial; switched to a Callaway Quantum driver.","2026","PGA Tour"),
+  "Sepp Straka": I("Solid 2026 (T8 PLAYERS); reshaped his schedule around newborn son Thomas, born premature in 2025.","2026","Sky Sports"),
+  "Harris English": I("First top-5 of 2026 at RBC Heritage; caddie Eric Larson barred from the UK last year (no US Open impact).","Apr 2026","Today's Golfer"),
+  "Ryan Gerard": I("Lost a Memorial playoff to Poston — his second runner-up of the year; still chasing a maiden win.","Jun 7 2026","CBS"),
+  "Hideki Matsuyama": I("In contention at Colonial (66-65 start) before fading to T13; lost the WM Phoenix playoff to Gotterup.","May 2026","PGA Tour"),
+  "Jacob Bridgeman": I("Won the Genesis Invitational at Riviera (over McIlroy & Kitayama) for his first Tour title — in front of Tiger.","Feb 2026","PGA Tour"),
+  "Patrick Reed": I("Left LIV in January and won two of his first four PGA Tour starts back.","2026","Today's Golfer"),
+  "Viktor Hovland": I("Rough 2026 — broken toe to start, MCs at Riviera/Bay Hill/PLAYERS; re-hired former coach TJ Yeaton.","Mar 2026","Golf Monthly"),
+  "Akshay Bhatia": I("Admits a 'subconscious' driving issue (declining off-the-tee) plus a March Valspar WD.","2026","EssentiallySports"),
+  "Sam Burns": I("Hot — T4 Memorial then T20 in Canada; back-to-back US Open top-10s and 54-hole leader last year.","Jun 2026","RotoBaller"),
+  "Kurt Kitayama": I("Four top-10s and No. 31 — but has missed the cut in his last four US Opens.","2026","Wikipedia"),
+  "Bryson DeChambeau": I("Strong LIV form (2 wins) but MC at both the Masters and PGA; reportedly close to a TaylorMade driver switch.","Jun 2026","GolfMagic"),
+  "Nicolai Højgaard": I("Best form of his career (four top-sixes, solo 2nd at Houston) though MC at Memorial.","Jun 2026","Fox Sports"),
+  "Wyndham Clark": I("'Embarrassed and ashamed' over last year's Oakmont locker-smashing (he's banned from the club); seeking redemption.","Jun 15 2026","CBS"),
+  "Min Woo Lee": I("Hadn't missed a cut in 2026 (T2 Pebble) until a putter-driven Memorial MC; skipped Canada.","Jun 2026","Flashscore"),
+  "Maverick McNealy": I("Consistent — cut in 8 of 9 with six top-25s; briefly shared the Friday lead at the PGA.","Jun 2026","PGA Tour"),
+  "J.T. Poston": I("Won the Memorial in a playoff over Gerard, grinding 33 holes Sunday — earned his US Open spot.","Jun 7 2026","Golf Channel"),
+  "Keegan Bradley": I("Poor form (3 MCs in 5 starts); still processing the 2025 Ryder Cup home loss he captained.","2026","Sky Sports"),
+  "Rickie Fowler": I("Resurgent (T2 Truist, 4 top-10s) after injections finally calmed a chronic left-shoulder issue.","May 2026","WFMD"),
+  "Jake Knapp": I("Out since mid-April with a thumb sprain (WD'd 3 straight incl. PGA); listed but only 'hopeful' — a game-time decision.","Jun 2026","theScore","injury"),
+  "Shane Lowry": I("Trying to jump-start a stalled season; T29 in Canada last week; strong links pedigree.","Jun 14 2026","Irish Golf Desk"),
+  "Gary Woodland": I("Won the Houston Open by five — his first win since brain surgery; recently disclosed PTSD struggles.","Apr 2026","ESPN"),
+  "Jason Day": I("Two top-10s in 2026 (No. 47); aiming to beat last year's T23.","2026","PGA Tour"),
+  "Adam Scott": I("Playing his 100th consecutive major — only Nicklaus has done it — and says he's here to win, not just show up.","Jun 13 2026","Washington Post/AP"),
+  "Jordan Spieth": I("Reports 'no pain' in the left wrist after 2024 surgery; the 2015 US Open champ is in on a full exemption.","Jun 2026","Yahoo"),
+  "Sam Stevens": I("In via top-60 OWGR; T24 at the 2026 Masters.","2026","Wikipedia"),
+  "Ryan Fox": I("Defending Canadian Open champ; into the field via top-60 OWGR.","2026","Golf Channel"),
+  "Corey Conners": I("Bounce-back T13 (API) — his first top-15 of 2026; a year on from a final-round wrist-injury WD at the 2025 US Open.","2026","Fox Sports"),
+  "Brian Harman": I("Hasn't missed a major cut since the 2024 Masters; won the 2025 Valero; played well at Shinnecock in 2018.","2026","BetMGM"),
+  "Sungjae Im": I("Returned from a wrist injury that cost him the first seven 2026 events; uneven form since.","2026","Fox Sports","injury"),
+  "Joaquin Niemann": I("Won LIV Korea for his first 2026 individual title to grab a US Open exemption; runner-up to Hatton in Spain.","Jun 2026","LIV Golf"),
+  "Sahith Theegala": I("Has a history of a recurring neck issue; his 2026 fitness isn't cleanly confirmed — verify before picking.","2026","Golf Digest (verify)"),
+  "Keith Mitchell": I("Qualified on 'Golf's Longest Day' (69-63), then contended early at the Canadian Open.","Jun 2026","Golf Channel"),
+  "Chris Kirk": I("Medalist at his final-qualifying site (65-64) to reach his 9th US Open.","Jun 8 2026","bet365"),
+  "Brooks Koepka": I("WD'd the Canadian Open with a hand injury (numb ring/pinkie fingers) but intends to play; getting treatment.","Jun 2026","Golf Channel","injury"),
+  "Cameron Smith": I("Sacked long-time coach Grant Field for Claude Harmon III; says he has 'a lot more confidence' in his swing.","May 2026","GolfMagic"),
+  "Dustin Johnson": I("Says he's 'finally' driving it like normal again after a T4 at LIV Korea.","Jun 2026","GolfMagic"),
+  "Billy Horschel": I("Still rebuilding from 2025 right-hip (torn labrum) surgery; showed a resurgence at Bay Hill in March.","Mar 2026","EssentiallySports","injury"),
+  "Tom Kim": I("Qualified via 36-hole final qualifying amid a multi-year slump.","Jun 2026","Golf Digest"),
+  "Davis Thompson": I("Former Tour winner who had to grind through final qualifying (-11) to make the field.","Jun 2026","Golf.com"),
+  "Michael Kim": I("Good 2026 form (T2 WM Phoenix); his first US Open since 2018.","2026","Golf Monthly"),
+  "Harry Hall": I("Decent early 2026 (T6 Sony, T9 Bay Hill).","2026","Golf Digest"),
+  "Nick Taylor": I("In via OWGR; last win the Jan 2025 Sony; T23 at last year's US Open.","2026","Wikipedia"),
+  "Matt McCarty": I("Poor recent run (MC-T60-MC incl. an 81 at Memorial); first US Open.","Jun 2026","Golf Digest"),
+  "Andrew Novak": I("Mixed 2026 (2 top-10s, 4 MCs).","2026","Yahoo"),
+  "Graeme McDowell": I("Qualified for his first major since 2020 (2010 US Open champ) — 'more excited than I ever thought I'd be'.","Jun 2026","Golf Monthly"),
+  "Padraig Harrington": I("The reigning US Senior Open champ says he's 'turned a corner', especially with the putter.","Jun 8 2026","Golf Channel"),
+  "Tyrrell Hatton": I("Won LIV Andalucía (over Rahm) just two weeks after wife Emily gave birth to a daughter.","Jun 7 2026","Golf Digest"),
+  "Patrick Cantlay": I("Four straight top-12s before the Masters; MC at last year's US Open.","2026","PGA Tour"),
+  "Alex Noren": I("Slow 2026 (best T29), back from a torn hamstring; closed 2025 with British Masters & BMW PGA wins.","2026","Today's Golfer"),
+  "Nico Echavarria": I("Won the Cognizant Classic in March (career-high No. 34).","Mar 2026","Golf Channel"),
+};
+for(const k in INTEL){ DATA[k]=Object.assign(DATA[k]||{}, INTEL[k]); }
+
+/* ---------------------------------------------------------------------
+   COMPLETE WIN ODDS — full Sportingbet decimal board (the user's book),
+   scraped 2026-06-16 and cross-checked vs DraftKings & Yahoo full-field
+   lists. This fills the entire field so real players no longer show
+   "no market". Applied last so it standardises every win price; existing
+   real Top-5 prices are preserved.
+   --------------------------------------------------------------------- */
+const ODDS_SRC_FULL = "Sportingbet 17704600 live board (2026-06-16), cross-checked vs DraftKings & Yahoo full-field";
+const TOP5 = { "Scottie Scheffler":2.10, "Rory McIlroy":3.20, "Jon Rahm":3.50,
+               "Cameron Young":4.33, "Tommy Fleetwood":5.00 };
+const WIN_FULL = {
+  "Scottie Scheffler":6.50,"Rory McIlroy":13.00,"Cameron Young":21.00,"Matt Fitzpatrick":21.00,
+  "Russell Henley":41.00,"Tommy Fleetwood":23.00,"Justin Rose":46.00,"Jon Rahm":15.00,
+  "J.J. Spaun":51.00,"Collin Morikawa":41.00,"Chris Gotterup":41.00,"Xander Schauffele":19.00,
+  "Ludvig Åberg":23.00,"Aaron Rai":81.00,"Ben Griffin":71.00,"Justin Thomas":41.00,
+  "Robert MacIntyre":71.00,"Si Woo Kim":41.00,"Sepp Straka":101.00,"Alex Noren":151.00,
+  "Tyrrell Hatton":34.00,"Harris English":81.00,"Ryan Gerard":101.00,"Hideki Matsuyama":61.00,
+  "Jacob Bridgeman":126.00,"Kristoffer Reitan":91.00,"Patrick Reed":41.00,"Viktor Hovland":41.00,
+  "Akshay Bhatia":111.00,"Sam Burns":41.00,"Kurt Kitayama":76.00,"Bryson DeChambeau":26.00,
+  "Nicolai Højgaard":91.00,"Wyndham Clark":41.00,"Min Woo Lee":71.00,"Patrick Cantlay":46.00,
+  "Maverick McNealy":71.00,"J.T. Poston":126.00,"Keegan Bradley":126.00,"Bud Cauley":81.00,
+  "Rickie Fowler":126.00,"Alex Smalley":101.00,"Jake Knapp":91.00,"Shane Lowry":71.00,
+  "Gary Woodland":126.00,"Daniel Berger":176.00,"Jason Day":126.00,"Adam Scott":91.00,
+  "Michael Kim":226.00,"Jordan Spieth":67.00,"Nico Echavarria":351.00,"Matt McCarty":251.00,
+  "Sam Stevens":251.00,"Ryan Fox":126.00,"Corey Conners":176.00,"David Puig":126.00,
+  "Pierceson Coody":226.00,"Brian Harman":176.00,"Michael Brennan":251.00,"Andrew Novak":251.00,
+  "Ryo Hisatsune":201.00,"Nick Taylor":151.00,"Harry Hall":176.00,"Max Greyserman":201.00,
+  "Alex Fitzpatrick":101.00,"Jayden Schaper":251.00,"Matti Schmid":301.00,"Sungjae Im":151.00,
+  "Johnny Keefer":301.00,"Joaquin Niemann":61.00,"Patrick Rodgers":351.00,"Sahith Theegala":151.00,
+  "Andrew Putnam":301.00,"Lucas Herbert":176.00,"Sudarshan Yellamaraju":201.00,"Max McGreevy":351.00,
+  "Keith Mitchell":151.00,"John Parry":401.00,"Chris Kirk":301.00,"Brooks Koepka":31.00,
+  "Adrien Saddier":501.00,"Emiliano Grillo":351.00,"Jackson Suber":251.00,"William Mouw":401.00,
+  "Kevin Roy":501.00,"Billy Horschel":301.00,"Cameron Smith":81.00,"Davis Thompson":201.00,
+  "Tom Kim":151.00,"Laurie Canter":501.00,"Adrien Dumont de Chassart":401.00,"Chandler Phillips":751.00,
+  "Peter Uihlein":501.00,"Ben Kohles":451.00,"Hennie Du Plessis":1001.00,"Carlos Ortiz":251.00,
+  "Neal Shipley":501.00,"Zac Blair":601.00,"Nathan Kimsey":401.00,"Ugo Coussaud":751.00,
+  "Taylor Montgomery":751.00,"Cooper Dossey":501.00,"Dustin Johnson":151.00,"Jackson Koivun":126.00,
+  "Ben Silverman":751.00,"Niklas Nørgaard":501.00,"Matthew Jordan":501.00,"James Nicholas":1001.00,
+  "Caleb Surratt":501.00,"Jimmy Stanger":501.00,"Harry Higgs":1001.00,"Rocco Repetto Taylor":751.00,
+  "Cole Hammer":601.00,"Alejandro Tosti":751.00,"Dylan Wu":1001.00,"Ryuichi Oiwa":1001.00,
+  "Taihei Sato":751.00,"Filippo Celli":1501.00,"Marcelo Rozo":1001.00,"Padraig Harrington":751.00,
+  "Carl Yuan":751.00,"Nick Hardy":751.00,"Brandon Wu":751.00,"Jackson Van Paris":1501.00,
+  "Kaito Onishi":1001.00,"Graeme McDowell":751.00,"J.B. Holmes":1001.00,"T.K. Kim":1001.00,
+  "Manav Shah":1501.00,"Eric Lee":1501.00,"Spencer Tibbits":1501.00,"Ben James":301.00,
+  "Jake Sollon":1501.00,"Angel Hidalgo":751.00,"Robbie Higgins":1501.00,"Jake Peacock":1501.00,
+  "Miles Russell":1001.00,"Preston Stout":601.00,"Greyson Leach":1501.00,"Giuseppe Puebla":1501.00,
+  "Mason Howell":1001.00,"Bryan Lee":1501.00,"Ethan Fang":1501.00,"Jack Schoenberger":1501.00,
+  "Mateo Pulcini":1501.00,"Brandon Holtz":1501.00,"Jackson Herrington":1501.00,"Hamilton Coleman":1501.00,
+  "Jackson Ormond":1501.00,"Chase Kyes":1501.00,"Vaughn Harber":1501.00,"Arni Sveinsson":1501.00,
+  "Ryder Cowan":1501.00,"Logan Reilly":1501.00,"Marek Fleming":1501.00,"Matthew Robles":1501.00,
+  // Genuinely not on any board (left as honest gaps): Marco Penge, Thayer Plewe
+};
+for(const name in WIN_FULL){
+  const e = DATA[name] || (DATA[name]={});
+  e.odds = e.odds || {win:null,top5:null,top10:null,top20:null,makeCut:null};
+  e.odds.win = WIN_FULL[name];
+  if(TOP5[name]!=null) e.odds.top5 = TOP5[name];
+  e.oddsSrc = ODDS_SRC_FULL;
+}
 
 // Exposed for app.js
 window.BG = { FIELD_META, ROSTER_RAW, DATA, FORM };

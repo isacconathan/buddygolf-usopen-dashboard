@@ -19,8 +19,14 @@ An interactive dashboard to help pick your **12 BuddyGolf players** for the
 - **Team builder** — pick up to 12, see projected total, how many are 51+ "double"
   picks, and **auto-pick the best 12** by your current weights.
 - **Player dossier** — click any row: real odds + sources, derived probabilities,
-  2026 form (last-5), major & Shinnecock history, and **editable cells** to paste
-  real numbers.
+  2026 form (last-5), major & Shinnecock history, **intel/news notes**, and
+  **editable cells** to paste real numbers.
+- **Intel notes** — verified colour on 68 players (injuries ⚕, new babies, coach
+  changes, momentum). Injury-flagged players show a red ⚕ marker on the row.
+- **Live auto-refresh** — the page checks the hosted odds file every 5 min and
+  offers a one-click reload when new odds land. A scheduled GitHub Action runs
+  `refresh.mjs` to re-scrape the boards (validation-gated; aborts rather than
+  write bad data).
 
 ## The BuddyGolf rules it encodes
 
@@ -72,6 +78,8 @@ dossier cells to instantly re-rank.
 - `index.html` — UI + styling
 - `app.js` — value engine (Monte-Carlo), scoring, rendering
 - `data.js` — sourced dataset (odds, form, history) with provenance
+- `refresh.mjs` — re-scrape odds + rewrite `data.js` (`node refresh.mjs`)
+- `.github/workflows/refresh-odds.yml` — scheduled auto-refresh (every 6h)
 - `run_test.js` — headless engine stress-test (`node run_test.js`)
 
 ---

@@ -1,0 +1,32 @@
+name: Refresh odds
+# Auto-pulls the full-field boards and commits updated odds if (and only if)
+# refresh.mjs passes its validation gates. The live dashboard then auto-detects
+# the change. Manual run available via "Run workflow".
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # every 6 hours
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Re-scrape odds (aborts safely if sources unreachable / implausible)
+        run: node refresh.mjs || echo "refresh skipped — data.js left unchanged"
+      - name: Commit if changed
+        run: |
+          if ! git diff --quiet data.js; then
+            git config user.name "odds-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add data.js
+            git commit -m "chore: auto-refresh US Open odds [skip ci]"
+            git push
+            echo "Odds updated and pushed."
+          else
+            echo "No odds change."
+          fi
