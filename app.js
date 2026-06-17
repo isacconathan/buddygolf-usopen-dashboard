@@ -26,6 +26,7 @@ const STATE = {
   applyDouble: true,
   applyPenalty: true,
   weights: { value: 70, form: 15, major: 10, course: 5 },
+  finish: { win: 12, t5: 11, t10: 9, t20: 4 }, // per-band emphasis for betting-value score
   sort: { key: 'pick', dir: -1 },
   filters: { q:'', band:'all', valuePlays:false, hideGaps:false, minCut:0 },
   team: new Set(),
@@ -177,15 +178,28 @@ function courseRaw(p){
   if(s==='MC')     return ped!=null?Math.min(38,ped):38;             // missed cut at Shinnecock '18
   return ped;                                                        // didn't play '18 -> US Open pedigree (null if none)
 }
+/* betting-value: expected BuddyGolf-style points from the odds, using the user's
+   per-finish-band emphasis (Win/Top5/Top10/Top20). Real place odds where available,
+   model-derived otherwise. 51+ doubling & miss-cut penalty applied. This is what
+   makes the value reward top-5/10/20 CONTENTION rather than pure winners/cut-makers. */
+function bettingRaw(p){
+  if(!p.model && !(p.odds&&p.odds.win)) return null;
+  const pWin=eff(p,'win')||0, pT5=eff(p,'top5')||0, pT10=eff(p,'top10')||0,
+        pT20=eff(p,'top20')||0, pCut=eff(p,'makeCut')||0;
+  const w=STATE.finish;
+  const bWin=pWin, b5=Math.max(0,pT5-pWin), b10=Math.max(0,pT10-pT5), b20=Math.max(0,pT20-pT10);
+  let v = w.win*bWin + w.t5*b5 + w.t10*b10 + w.t20*b20;
+  if(STATE.applyDouble && p.wgr>=51) v*=2;             // BuddyGolf 51+ double points
+  if(STATE.applyPenalty) v -= RULES.missPenalty(p.wgr)*(1-pCut);
+  return v;
+}
 function computeSubScores(){
   const P=STATE.players;
-  const nV=normalise(P.map(p=>p.model?p.model.xPts:null));
-  const nF=normalise(P.map(formRaw));
-  const nM=normalise(P.map(majorRaw));
-  const nC=normalise(P.map(courseRaw));
-  P.forEach(p=>{
-    p.sub={ value:nV(p.model?p.model.xPts:null), form:nF(formRaw(p)),
-            major:nM(majorRaw(p)), course:nC(courseRaw(p)) };
+  const bv=P.map(bettingRaw);
+  const nV=normalise(bv), nF=normalise(P.map(formRaw)),
+        nM=normalise(P.map(majorRaw)), nC=normalise(P.map(courseRaw));
+  P.forEach((p,i)=>{
+    p.sub={ value:nV(bv[i]), form:nF(formRaw(p)), major:nM(majorRaw(p)), course:nC(courseRaw(p)) };
   });
 }
 
@@ -471,6 +485,12 @@ function init(){
     el.value=STATE.weights[key];
     $('#'+id+'v').textContent=STATE.weights[key];
     el.addEventListener('input',()=>{ STATE.weights[key]=+el.value; $('#'+id+'v').textContent=el.value; render(); });
+  });
+  // finish-emphasis sub-sliders (shape the betting-value score)
+  [['fWin','win'],['fT5','t5'],['fT10','t10'],['fT20','t20']].forEach(([id,key])=>{
+    const el=$('#'+id); el.value=STATE.finish[key]; $('#'+id+'v').textContent=STATE.finish[key];
+    el.addEventListener('input',()=>{ STATE.finish[key]=+el.value; $('#'+id+'v').textContent=el.value;
+      computeSubScores(); render(); });
   });
   // toggles
   $('#tgDouble').checked=STATE.applyDouble;
