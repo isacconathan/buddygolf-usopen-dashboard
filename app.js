@@ -618,15 +618,72 @@ function renderDifferentials(){
     </tbody></table>`;
   $$('#diffBody tr[data-name]').forEach(tr=>tr.addEventListener('click',()=>openDetail(P.find(p=>p.name===tr.dataset.name))));
 }
+/* ---------- My 12: team sheet with the case for each pick ---------- */
+function buildOptimalSquad(){
+  if(!STRAT.ran) runStrategyLab();
+  const dBest=STRAT.res.doubles.reduce((a,b)=>b.win>a.win?b:a);
+  STATE.team=new Set(dBest.team.map(i=>STATE.players[i].name));
+  return dBest.k;
+}
+function rationale(p){
+  const out=[];
+  const t5=Math.round((eff(p,'top5')||0)*100), t10=Math.round((eff(p,'top10')||0)*100), cut=Math.round((eff(p,'makeCut')||0)*100);
+  if(p.wgr>=51) out.push('💰 <b>Double-points play</b> (WGR '+p.wgr+') — every finishing point counts 2× and a missed cut is only −1. Best risk/reward in BuddyGolf, so the strategy leans on a few of these.');
+  else if(p.wgr<=10) out.push('⭐ <b>Elite anchor</b> (WGR '+p.wgr+') — '+t10+'% to finish top-10. ⚠ But top-10-ranked: a missed cut costs <b>−6</b>, so he has to contend, not just survive.');
+  else out.push('<b>Mid-tier value</b> (WGR '+p.wgr+') — '+t10+'% top-10; a missed cut costs −3.');
+  out.push('📊 Market: '+fmtOdds(p.odds.win)+' to win · ≈'+t5+'% top-5 · '+t10+'% top-10 · '+cut+'% to make the cut.');
+  if(p.intel && p.intel.flag==='injury') out.push('⚕ <b>Watch:</b> '+p.intel.text);
+  else if(p.history && typeof p.history.sh2018==='number' && p.history.sh2018<=20) out.push('⛳ Shinnecock 2018: finished '+p.history.sh2018+' — proven on this exact course.');
+  else if(p.form && /hot|win/i.test(p.form.read||'')) out.push('🔥 '+p.form.read);
+  else if(p.history && p.history.majorsWon && p.history.majorsWon.length) out.push('🏆 Pedigree: '+p.history.majorsWon.map(w=>w.name+' '+w.year).join(', ')+'.');
+  else if(p.intel) out.push('📋 '+p.intel.text);
+  out.push((p.cls==='Flair'?'🎲 <b>Flair</b> — ceiling/variance to separate from the field.':'🛡️ <b>Safe</b> — high floor to protect your score.'));
+  return out;
+}
+function squadCard(p){
+  const pen=RULES.missPenalty(p.wgr);
+  return `<div class="scard ${p.intel&&p.intel.flag==='injury'?'inj':''}" data-name="${p.name.replace(/"/g,'&quot;')}">
+    <div class="sc-h">
+      <div><span class="sc-n">${p.name}</span>${p.wgr>=51?' <span class="b2x">2×</span>':''}<span class="sc-cls">${p.cls==='Flair'?'🎲 Flair':'🛡️ Safe'}</span></div>
+      <div class="sc-x">${p.model?num(p.model.xPts,1):'—'}<small>proj pts</small></div>
+    </div>
+    <div class="sc-meta">WGR ${p.wgr===999?'—':p.wgr} · win ${fmtOdds(p.odds.win)} · miss-cut <b class="${pen>=6?'bad':''}">−${pen}</b></div>
+    <ul class="sc-why">${rationale(p).map(x=>'<li>'+x+'</li>').join('')}</ul>
+  </div>`;
+}
+function renderSquad(){
+  const el=$('#squadBody'); if(!el) return;
+  if(STATE.team.size!==12) buildOptimalSquad();
+  const squad=[...STATE.team].map(n=>STATE.players.find(p=>p.name===n)).filter(Boolean)
+    .sort((a,b)=>(b.model?.xPts??-99)-(a.model?.xPts??-99));
+  let total=0,dbl=0,safe=0,flair=0,topRisk=0;
+  squad.forEach(p=>{ if(p.model)total+=p.model.xPts; if(p.wgr>=51)dbl++;
+    if(p.cls==='Flair')flair++; else if(p.cls==='Safe')safe++; if(p.wgr<=10)topRisk++; });
+  el.innerHTML=`
+    <div class="squadsum">
+      <div class="kpi"><b>${total.toFixed(1)}</b><span>Proj. points</span></div>
+      <div class="kpi"><b>${dbl}</b><span>2× doubles</span></div>
+      <div class="kpi"><b>${safe}/${flair}</b><span>safe / flair</span></div>
+      <div class="kpi"><b>${topRisk}</b><span>−6 risk picks</span></div>
+    </div>
+    <p class="fine">Built to the Strategy Lab plan: <b>${dbl} double-points players</b> for 2× upside at only −1 downside, a high-floor safe core, and lower-owned differentials. Reminder: a <b>top-10-ranked player who misses the cut is −6</b>, so the favourites below must contend — the WGR 51+ picks only risk −1. Click any card for the full dossier.</p>
+    <div class="squadgrid">${squad.map(squadCard).join('')}</div>
+    <div style="margin-top:14px"><button class="btn primary" id="rebuildSquad" style="max-width:260px">⚡ Re-build strategy-optimal 12</button></div>`;
+  $('#rebuildSquad').onclick=()=>{ STATE.team.clear(); renderSquad(); };
+  $$('#squadBody .scard[data-name]').forEach(c=>c.addEventListener('click',e=>{
+    if(e.target.tagName==='BUTTON')return; openDetail(STATE.players.find(p=>p.name===c.dataset.name)); }));
+}
+
 const cap=s=>s[0].toUpperCase()+s.slice(1);
 function switchView(v){
-  ['board','lab','diff'].forEach(x=>{
+  ['board','lab','diff','team'].forEach(x=>{
     $('#view'+cap(x)).style.display = v===x?'':'none';
     $('#tab'+cap(x)).classList.toggle('on', v===x);
   });
   if(v==='board') render();
   else if(v==='lab'){ if(!STRAT.ran){ renderStrategyLab(); setTimeout(()=>{ runStrategyLab(); renderStrategyLab(); },30); } else renderStrategyLab(); }
   else if(v==='diff') renderDifferentials();
+  else if(v==='team') renderSquad();
 }
 function updateFmtBtn(){ const b=$('#oddsFmtBtn'); if(b) b.textContent='Odds: '+(STATE.oddsFmt==='dec'?'Decimal':'Fractional'); }
 
@@ -681,6 +738,7 @@ function init(){
   $('#tabBoard').addEventListener('click',()=>switchView('board'));
   $('#tabLab').addEventListener('click',()=>switchView('lab'));
   $('#tabDiff').addEventListener('click',()=>switchView('diff'));
+  $('#tabTeam').addEventListener('click',()=>switchView('team'));
   $('#oddsFmtBtn').addEventListener('click',()=>{ STATE.oddsFmt=STATE.oddsFmt==='dec'?'frac':'dec'; updateFmtBtn(); render(); });
   updateFmtBtn();
   $('#rerunLab').addEventListener('click',()=>{ STRAT.ran=false; renderStrategyLab();

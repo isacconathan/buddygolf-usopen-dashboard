@@ -185,6 +185,22 @@ table.dt small{color:var(--mut)}
 .difft tr[data-name]{cursor:pointer}
 .difft tr[data-name]:hover{background:#15231b}
 .difft .mut{color:var(--mut)}
+.squadsum{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.squadgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:900px){.squadgrid{grid-template-columns:1fr}.squadsum{grid-template-columns:repeat(2,1fr)}}
+.scard{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:13px 14px;cursor:pointer}
+.scard:hover{border-color:var(--grn2)}
+.scard.inj{border-color:var(--red)}
+.sc-h{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.sc-n{font-weight:700;font-size:15px}
+.sc-cls{font-size:10.5px;margin-left:6px;color:var(--fai)}
+.sc-x{text-align:right;font-weight:700;color:var(--grn);font-size:18px;line-height:1.05}
+.sc-x small{display:block;font-size:9.5px;color:var(--mut);font-weight:500}
+.sc-meta{font-size:11.5px;color:var(--fai);margin:6px 0 9px}
+.sc-meta .bad{color:var(--red)}
+.sc-why{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px}
+.sc-why li{font-size:12px;color:var(--fai);line-height:1.45}
+.sc-why b{color:var(--ink)}
 .banner{background:linear-gradient(90deg,#1a2c20,#142019);border:1px solid var(--line);border-radius:12px;
   padding:11px 15px;font-size:12.5px;color:var(--fai);margin-bottom:14px}
 .banner b{color:var(--gold)}
@@ -212,6 +228,14 @@ table.dt small{color:var(--mut)}
     <button id="tabBoard" class="tab on">📊 Leaderboard</button>
     <button id="tabLab" class="tab">🧪 Strategy Lab</button>
     <button id="tabDiff" class="tab">💎 Differentials</button>
+    <button id="tabTeam" class="tab">🏆 My 12</button>
+  </div>
+
+  <div id="viewTeam" style="display:none">
+    <div class="card">
+      <h2>🏆 My 12 — your team &amp; the case for each pick</h2>
+      <div class="pad"><div id="squadBody"></div></div>
+    </div>
   </div>
 
   <div id="viewDiff" style="display:none">
