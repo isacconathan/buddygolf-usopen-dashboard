@@ -96,7 +96,7 @@ function computeModel(){
   const sum = raw.reduce((a,b)=>a+b,0);
   const logw = raw.map(x=>Math.log(x/sum));
 
-  const sumPts=new Float64Array(N), cWin=new Float64Array(N), cT5=new Float64Array(N),
+  const sumPts=new Float64Array(N), sumP2=new Float64Array(N), cWin=new Float64Array(N), cT5=new Float64Array(N),
         cT10=new Float64Array(N), cT20=new Float64Array(N), cCut=new Float64Array(N);
   const score=new Float64Array(N);
   let order=[...Array(N).keys()];
@@ -111,16 +111,19 @@ function computeModel(){
       if(position<=10) cT10[pi]++;
       if(position<=20) cT20[pi]++;
       if(position<=cut)cCut[pi]++;
-      sumPts[pi]+=buddyPoints(position,P[pi].wgr);
+      const pp=buddyPoints(position,P[pi].wgr); sumPts[pi]+=pp; sumP2[pi]+=pp*pp;
     }
   }
   P.forEach((p,i)=>{
     const hasOdds = !!(p.odds && p.odds.win);
+    const m=sumPts[i]/SIMS;
     p.model = hasOdds ? {
       win:cWin[i]/SIMS, top5:cT5[i]/SIMS, top10:cT10[i]/SIMS,
-      top20:cT20[i]/SIMS, makeCut:cCut[i]/SIMS, xPts:sumPts[i]/SIMS,
+      top20:cT20[i]/SIMS, makeCut:cCut[i]/SIMS, xPts:m,
+      std:Math.sqrt(Math.max(0, sumP2[i]/SIMS - m*m)),  // volatility -> safe/flair
     } : null;
   });
+  classifyPlayers();
   computeSubScores();
 }
 
@@ -362,7 +365,8 @@ function openDetail(p){
     <h2>${p.name} ${p.wgr>=51?'<span class="b2x">2× points</span>':''}</h2>
     <div class="dmeta">WGR ${p.wgr===999?'unranked':p.wgr}
       · miss-cut penalty <b>${STATE.applyPenalty?('-'+RULES.missPenalty(p.wgr)):'off'}</b>
-      ${p.wgr>=51?'· <b>double points on every finish</b>':''}</div>
+      ${p.wgr>=51?'· <b>double points on every finish</b>':''}
+      ${p.cls?`· ${p.cls==='Flair'?'🎲':'🛡️'} <b>${p.cls} pick</b>${p.flair!=null?` (volatility ${p.flair}/100)`:''}`:''}</div>
 
     <div class="dcard">
       <h3>📈 Projected BuddyGolf points <span class="hx">${m?num(m.xPts,2):'no model'}</span></h3>
@@ -471,6 +475,125 @@ function updateDataCard(){
         : `Auto-check ${REFRESH.on?'<b style="color:var(--grn)">on</b>':'<span style="color:var(--mut)">off</span>'} · checked ${agoStr(REFRESH.lastCheck)}`);
 }
 
+/* =====================================================================
+   STRATEGY LAB — optimal # of double-points players & safe:flair ratio.
+   Tournament Monte-Carlo: each sim draws a full-field finish, scores
+   BuddyGolf points, and counts a "win" when your team tops a rival field.
+   ===================================================================== */
+function classifyPlayers(){
+  const P=STATE.players;
+  // boom/bust = high volatility RELATIVE to expectation (coeff. of variation)
+  // + a low make-cut floor. Favourites have high ceiling but a high floor too,
+  // so they read as Safe; volatile longshots read as Flair.
+  const cov=P.map(p=>p.model? p.model.std/(Math.abs(p.model.xPts)+1) : null);
+  const nCov=normalise(cov);
+  P.forEach((p,i)=>{
+    if(!p.model){ p.flair=null; p.cls=null; return; }
+    const lowFloor=(1-p.model.makeCut)*100;
+    p.flair=Math.round(Math.min(100, 0.6*(nCov(cov[i])||0) + 0.4*lowFloor));
+  });
+  const vals=P.filter(p=>p.flair!=null).map(p=>p.flair).sort((a,b)=>a-b);
+  const med=vals.length?vals[Math.floor(vals.length/2)]:50;
+  P.forEach(p=>{ if(p.flair!=null) p.cls = p.flair>=med ? 'Flair':'Safe'; });
+}
+
+const STRAT={ ran:false, res:null, M:2500, opp:7 };
+function weightedSampleTeam(pool, weights, k){
+  const chosen=[], used=new Set();
+  while(chosen.length<k){
+    let tot=0; for(const i of pool) if(!used.has(i)) tot+=weights[i];
+    let r=Math.random()*tot, pick=-1;
+    for(const i of pool){ if(used.has(i))continue; r-=weights[i]; if(r<=0){pick=i;break;} }
+    if(pick<0) for(const i of pool) if(!used.has(i)){pick=i;break;}
+    used.add(pick); chosen.push(pick);
+  }
+  return chosen;
+}
+function bestTeamBy(filterFn, k, otherFn){
+  const P=STATE.players, idx=[...P.keys()].filter(i=>P[i].model);
+  const sc=i=>pickScore(P[i]).score ?? -1;
+  const A=idx.filter(i=>filterFn(P[i])).sort((a,b)=>sc(b)-sc(a));
+  const B=idx.filter(i=>otherFn(P[i])).sort((a,b)=>sc(b)-sc(a));
+  if(A.length<k || B.length<12-k) return null;
+  return A.slice(0,k).concat(B.slice(0,12-k));
+}
+function runStrategyLab(){
+  const P=STATE.players, N=P.length;
+  const raw=P.map(p=>(p.odds&&p.odds.win)?1/p.odds.win:fillerWeight(p.wgr));
+  const sum=raw.reduce((a,b)=>a+b,0), logw=raw.map(x=>Math.log(x/sum));
+  // rivals are SHARP: sample heavily toward high-value players (cubed weight) so
+  // the field clusters near the EV frontier -> upside/variance is what separates.
+  const pop=P.map(p=>p.model?Math.pow(Math.max(0.5,(pickScore(p).score||0)),3):0);
+  const modelled=[...P.keys()].filter(i=>P[i].model);
+  const isDouble=p=>p.wgr>=51, isTop=p=>p.wgr<51, isFlair=p=>p.cls==='Flair', isSafe=p=>p.cls==='Safe';
+  const dTeams={}, fTeams={};
+  for(let k=0;k<=12;k++){ dTeams[k]=bestTeamBy(isDouble,k,isTop); fTeams[k]=bestTeamBy(isFlair,k,isSafe); }
+  const opps=[]; for(let o=0;o<STRAT.opp;o++) opps.push(weightedSampleTeam(modelled,pop,12));
+  const dWin={},dPts={},fWin={},fPts={}; for(let k=0;k<=12;k++){dWin[k]=0;dPts[k]=0;fWin[k]=0;fPts[k]=0;}
+  const score=new Float64Array(N), pts=new Float64Array(N); let order=[...Array(N).keys()];
+  const tot=t=>{let s=0;for(const i of t)s+=pts[i];return s;};
+  for(let s=0;s<STRAT.M;s++){
+    for(let i=0;i<N;i++) score[i]=logw[i]-Math.log(-Math.log(Math.random()));
+    order.sort((a,b)=>score[b]-score[a]);
+    for(let pos=0;pos<N;pos++){ const pi=order[pos]; pts[pi]=buddyPoints(pos+1,P[pi].wgr); }
+    let maxOpp=-1e9;
+    for(let o=0;o<opps.length;o++){ const v=tot(opps[o]); if(v>maxOpp)maxOpp=v; }
+    for(let k=0;k<=12;k++){
+      if(dTeams[k]){ const v=tot(dTeams[k]); dPts[k]+=v; if(v>maxOpp)dWin[k]++; }
+      if(fTeams[k]){ const v=tot(fTeams[k]); fPts[k]+=v; if(v>maxOpp)fWin[k]++; }
+    }
+  }
+  const pack=(teams,win,pt)=>{const o=[];for(let k=0;k<=12;k++){if(!teams[k])continue;
+    o.push({k,win:win[k]/STRAT.M,pts:pt[k]/STRAT.M,team:teams[k]});}return o;};
+  STRAT.res={ doubles:pack(dTeams,dWin,dPts), flair:pack(fTeams,fWin,fPts),
+    nDouble:modelled.filter(i=>isDouble(P[i])).length,
+    nFlair:modelled.filter(i=>isFlair(P[i])).length, nSafe:modelled.filter(i=>isSafe(P[i])).length };
+  STRAT.ran=true;
+}
+function sbar(label, frac, txt, best){
+  return `<div class="sbar ${best?'best':''}"><span class="sb-l">${label}</span>
+    <div class="sb-t"><span style="width:${Math.max(2,frac*100)}%"></span></div><span class="sb-v">${txt}</span></div>`;
+}
+function renderStrategyLab(){
+  const el=$('#labBody'); if(!el) return;
+  if(!STRAT.ran){ el.innerHTML='<p class="fine">⛳ Simulating '+STRAT.M.toLocaleString()+' tournaments…</p>'; return; }
+  const r=STRAT.res;
+  const dBest=r.doubles.reduce((a,b)=>b.win>a.win?b:a), fBest=r.flair.reduce((a,b)=>b.win>a.win?b:a);
+  const mD=Math.max(...r.doubles.map(x=>x.win)), mF=Math.max(...r.flair.map(x=>x.win));
+  const dBars=r.doubles.map(x=>sbar(x.k+(x.k===1?' double':' doubles'), x.win/mD,
+    (x.win*100).toFixed(1)+'% win · '+x.pts.toFixed(0)+' pts', x===dBest)).join('');
+  const fBars=r.flair.map(x=>sbar((12-x.k)+' safe / '+x.k+' flair', x.win/mF,
+    (x.win*100).toFixed(1)+'% win', x===fBest)).join('');
+  el.innerHTML=`<div class="labgrid">
+    <div class="labcard">
+      <h3>🎯 Optimal double-points players</h3>
+      <p class="fine">Win-rate of your best 12 vs a ${STRAT.opp}-rival field over ${STRAT.M.toLocaleString()} simulated tournaments, by how many WGR 51+ (2×) players you carry.</p>
+      ${dBars}
+      <p class="rec">Sweet spot: <b>${dBest.k} double-points pick${dBest.k===1?'':'s'}</b> — best win rate ${(dBest.win*100).toFixed(1)}%. (${r.nDouble} doubles available.)</p>
+      <button class="btn primary" id="useDoubles">⚡ Load this ${dBest.k}-double team</button>
+    </div>
+    <div class="labcard">
+      <h3>⚖️ Safe : Flair sweet spot</h3>
+      <p class="fine">Same sim, varying how many high-variance "flair" picks (vs steady "safe" picks) you carry. Flair = boom/bust (volatile scoring, low floor); Safe = reliable.</p>
+      ${fBars}
+      <p class="rec">Sweet spot: <b>${12-fBest.k} safe : ${fBest.k} flair</b> — win rate ${(fBest.win*100).toFixed(1)}%. (Field: ${r.nSafe} safe / ${r.nFlair} flair.)</p>
+      <button class="btn" id="useFlair">Load this ${12-fBest.k}-safe / ${fBest.k}-flair team</button>
+    </div></div>
+    <p class="fine" style="margin-top:12px">Method: each sim draws a whole-field finish from the same Plackett-Luce model, scores BuddyGolf points (incl. 51+ doubling &amp; miss-cut penalty), and logs a win when your team tops a popularity-weighted ${STRAT.opp}-rival field. Opponents assumed independent — treat as directional. Re-run after changing odds or the sliders.</p>`;
+  $('#useDoubles').onclick=()=>{ STATE.team=new Set(dBest.team.map(i=>STATE.players[i].name)); switchView('board'); flash('Loaded the optimal '+dBest.k+'-double team.'); };
+  $('#useFlair').onclick=()=>{ STATE.team=new Set(fBest.team.map(i=>STATE.players[i].name)); switchView('board'); flash('Loaded the '+fBest.k+'-flair team.'); };
+}
+function switchView(v){
+  const board=v!=='lab';
+  $('#viewBoard').style.display=board?'':'none';
+  $('#viewLab').style.display=board?'none':'';
+  $('#tabBoard').classList.toggle('on',board);
+  $('#tabLab').classList.toggle('on',!board);
+  if(board){ render(); return; }
+  if(!STRAT.ran){ renderStrategyLab(); setTimeout(()=>{ runStrategyLab(); renderStrategyLab(); },30); }
+  else renderStrategyLab();
+}
+
 /* ---------- wire up ---------- */
 function init(){
   buildPlayers();
@@ -518,6 +641,14 @@ function init(){
   $('#tgAuto').addEventListener('change',e=>setAutoRefresh(e.target.checked));
   $('#refreshBtn').addEventListener('click',()=>checkForNewData(true));
   setAutoRefresh(REFRESH.on); updateDataCard();
+  // strategy lab tabs
+  $('#tabBoard').addEventListener('click',()=>switchView('board'));
+  $('#tabLab').addEventListener('click',()=>switchView('lab'));
+  $('#rerunLab').addEventListener('click',()=>{ STRAT.ran=false; renderStrategyLab();
+    setTimeout(()=>{ runStrategyLab(); renderStrategyLab(); },30); });
+  $('#rivals').addEventListener('input',e=>{ STRAT.opp=+e.target.value; $('#rivalsv').textContent=e.target.value; });
+  $('#rivals').addEventListener('change',()=>{ STRAT.ran=false; renderStrategyLab();
+    setTimeout(()=>{ runStrategyLab(); renderStrategyLab(); },30); });
 
   recalcAll();
 }
