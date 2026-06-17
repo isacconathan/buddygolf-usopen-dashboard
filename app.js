@@ -31,6 +31,7 @@ const STATE = {
   filters: { q:'', band:'all', valuePlays:false, hideGaps:false, minCut:0 },
   team: new Set(),
   selected: null,
+  oddsFmt: 'dec',        // 'dec' decimal (41.00) | 'frac' fractional (40/1)
 };
 
 /* ---------- helpers ---------- */
@@ -44,6 +45,17 @@ function flipName(lastFirst){           // "DeChambeau, Bryson" -> "Bryson DeCha
 function pct(x){ return x==null? '—' : (x*100).toFixed(x<0.1?1:0)+'%'; }
 function num(x,d=1){ return x==null? '—' : x.toFixed(d); }
 function dec(x){ return x==null? '—' : x.toFixed(2); }
+function gcd(a,b){ return b?gcd(b,a%b):Math.abs(a); }
+function decToFrac(d){                 // 41.00 -> "40/1", 2.10 -> "11/10"
+  const x=d-1; if(x<=0) return '1/'+Math.max(1,Math.round(1/Math.max(d-1,1e-6)));
+  let best=null;
+  for(let den=1;den<=20;den++){ const num=Math.round(x*den); if(num<1) continue;
+    const err=Math.abs(x-num/den);
+    if(!best || err<best.err-1e-9) best={num,den,err}; }
+  if(!best) return '1/'+Math.max(1,Math.round(1/x));
+  const g=gcd(best.num,best.den)||1; return (best.num/g)+'/'+(best.den/g);
+}
+function fmtOdds(d){ return d==null?'—':(STATE.oddsFmt==='frac'?decToFrac(d):d.toFixed(2)); }
 
 /* ---------- BuddyGolf scoring ---------- */
 function positivePoints(position){
@@ -267,7 +279,7 @@ function render(){
       const d=oddsDisp(p,key); if(d.odds==null) return '<td class="t gap-c">—</td>';
       const cls=d.kind==='ovr'?'ovr':d.kind==='real'?'real':'mdl';
       const title=d.kind==='real'?'real Sportingbet odds':d.kind==='ovr'?'your odds':'≈ model-derived odds';
-      return `<td class="t ${cls}" title="${title}">${d.kind==='mdl'?'≈':''}${d.odds.toFixed(2)}</td>`;
+      return `<td class="t ${cls}" title="${title}">${d.kind==='mdl'?'≈':''}${fmtOdds(d.odds)}</td>`;
     };
     tr.innerHTML=`
       <td class="rank">${i+1}</td>
@@ -280,7 +292,7 @@ function render(){
         ${r.missing&&r.missing.length?`<span class="bmiss" title="Missing data for: ${r.missing.join(', ')} — blend uses available categories only">partial</span>`:''}
       </td>
       <td class="wgr">${p.wgr===999?'—':p.wgr}</td>
-      <td class="t">${p.odds?.win?dec(p.odds.win):'<span class=gap-c>—</span>'}</td>
+      <td class="t">${p.odds?.win?fmtOdds(p.odds.win):'<span class=gap-c>—</span>'}</td>
       ${probCell('top5')}${probCell('top10')}${probCell('top20')}${probCell('makeCut')}
       <td class="xp ${p.model&&p.model.xPts<0?'neg':''}">${p.model?num(p.model.xPts,1):'<span class=gap-c>—</span>'}</td>
       <td class="ps">${r.pick==null?'<span class=gap-c>—</span>':`<div class="psbar"><span style="width:${Math.max(2,r.pick)}%"></span><b>${num(r.pick,0)}</b></div>`}</td>
@@ -351,7 +363,7 @@ function openDetail(p){
       : oddsDisp(p,key);
     const prob = key==='win' ? (p.model?p.model.win:null) : eff(p,key);
     const oddsTxt = d.odds==null ? '<span class=gap-c>—</span>'
-      : `<span class="${d.kind==='real'?'oreal':d.kind==='ovr'?'oovr':'omdl'}">${d.kind==='mdl'?'≈':''}${d.odds.toFixed(2)}</span>`
+      : `<span class="${d.kind==='real'?'oreal':d.kind==='ovr'?'oovr':'omdl'}">${d.kind==='mdl'?'≈':''}${fmtOdds(d.odds)}</span>`
         + (d.kind==='real'?' <small>real</small>':d.kind==='ovr'?' <small>yours</small>':' <small>≈model</small>');
     const inputVal = (p.override && p.override[key]!=null)?p.override[key]:'';
     const input = key==='win'
@@ -583,16 +595,40 @@ function renderStrategyLab(){
   $('#useDoubles').onclick=()=>{ STATE.team=new Set(dBest.team.map(i=>STATE.players[i].name)); switchView('board'); flash('Loaded the optimal '+dBest.k+'-double team.'); };
   $('#useFlair').onclick=()=>{ STATE.team=new Set(fBest.team.map(i=>STATE.players[i].name)); switchView('board'); flash('Loaded the '+fBest.k+'-flair team.'); };
 }
-function switchView(v){
-  const board=v!=='lab';
-  $('#viewBoard').style.display=board?'':'none';
-  $('#viewLab').style.display=board?'none':'';
-  $('#tabBoard').classList.toggle('on',board);
-  $('#tabLab').classList.toggle('on',!board);
-  if(board){ render(); return; }
-  if(!STRAT.ran){ renderStrategyLab(); setTimeout(()=>{ runStrategyLab(); renderStrategyLab(); },30); }
-  else renderStrategyLab();
+/* ---------- Differentials: lower-owned value to separate from the field ---------- */
+function renderDifferentials(){
+  const el=$('#diffBody'); if(!el) return;
+  const P=STATE.players;
+  const nOwn=normalise(P.map(p=>p.model?1/p.odds.win:null));   // chalk proxy: public backs favourites
+  const rows=P.filter(p=>p.model && p.sub && p.sub.value!=null).map(p=>{
+    const own=nOwn(1/p.odds.win)||0; return {p, own, diff:(p.sub.value-own)};
+  }).sort((a,b)=>b.diff-a.diff).slice(0,24);
+  el.innerHTML=`
+    <p class="fine">Lower-owned players the model still rates — taking 1–2 separates you from a chalk-heavy field (and matters more the bigger your pool). "Chalk" is a proxy from win odds (the public backs favourites); "Value" is your betting-value score under the current sliders; <b>Diff = Value − Chalk</b>.</p>
+    <table class="difft"><thead><tr><th>#</th><th class="l">Player</th><th>WGR</th><th>Win</th><th>Top 10</th><th>Value</th><th>Chalk</th><th>Diff ⬆</th><th>Type</th></tr></thead><tbody>
+    ${rows.map((r,i)=>{ const p=r.p, t10=oddsDisp(p,'top10');
+      return `<tr data-name="${p.name.replace(/"/g,'&quot;')}"><td class="rank">${i+1}</td>
+        <td class="l nm"><span class="pn">${p.name}</span>${p.wgr>=51?' <span class="b2x">2×</span>':''}${p.intel?` <span class="bnews ${p.intel.flag==='injury'?'inj':''}">${p.intel.flag==='injury'?'⚕':'📋'}</span>`:''}</td>
+        <td class="mut">${p.wgr===999?'—':p.wgr}</td>
+        <td class="t">${fmtOdds(p.odds.win)}</td>
+        <td class="t mdl">${t10.odds?(t10.kind==='mdl'?'≈':'')+fmtOdds(t10.odds):'—'}</td>
+        <td>${num(p.sub.value,0)}</td><td class="mut">${num(r.own,0)}</td>
+        <td class="xp">${num(r.diff,0)}</td>
+        <td>${p.cls==='Flair'?'🎲':'🛡️'} ${p.cls||''}</td></tr>`;}).join('')}
+    </tbody></table>`;
+  $$('#diffBody tr[data-name]').forEach(tr=>tr.addEventListener('click',()=>openDetail(P.find(p=>p.name===tr.dataset.name))));
 }
+const cap=s=>s[0].toUpperCase()+s.slice(1);
+function switchView(v){
+  ['board','lab','diff'].forEach(x=>{
+    $('#view'+cap(x)).style.display = v===x?'':'none';
+    $('#tab'+cap(x)).classList.toggle('on', v===x);
+  });
+  if(v==='board') render();
+  else if(v==='lab'){ if(!STRAT.ran){ renderStrategyLab(); setTimeout(()=>{ runStrategyLab(); renderStrategyLab(); },30); } else renderStrategyLab(); }
+  else if(v==='diff') renderDifferentials();
+}
+function updateFmtBtn(){ const b=$('#oddsFmtBtn'); if(b) b.textContent='Odds: '+(STATE.oddsFmt==='dec'?'Decimal':'Fractional'); }
 
 /* ---------- wire up ---------- */
 function init(){
@@ -641,9 +677,12 @@ function init(){
   $('#tgAuto').addEventListener('change',e=>setAutoRefresh(e.target.checked));
   $('#refreshBtn').addEventListener('click',()=>checkForNewData(true));
   setAutoRefresh(REFRESH.on); updateDataCard();
-  // strategy lab tabs
+  // view tabs + odds-format toggle
   $('#tabBoard').addEventListener('click',()=>switchView('board'));
   $('#tabLab').addEventListener('click',()=>switchView('lab'));
+  $('#tabDiff').addEventListener('click',()=>switchView('diff'));
+  $('#oddsFmtBtn').addEventListener('click',()=>{ STATE.oddsFmt=STATE.oddsFmt==='dec'?'frac':'dec'; updateFmtBtn(); render(); });
+  updateFmtBtn();
   $('#rerunLab').addEventListener('click',()=>{ STRAT.ran=false; renderStrategyLab();
     setTimeout(()=>{ runStrategyLab(); renderStrategyLab(); },30); });
   $('#rivals').addEventListener('input',e=>{ STRAT.opp=+e.target.value; $('#rivalsv').textContent=e.target.value; });
