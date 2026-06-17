@@ -371,7 +371,14 @@ table.dt small{color:var(--mut)}
 <div id="drawer"></div>
 <div id="flash"></div>
 
-<script src="data.js"></script>
-<script src="app.js"></script>
+<script>
+/* Always load fresh data.js + app.js (cache-busted, in order) so a new build
+   is never run against a stale cached script. */
+(function(){ var t='?t='+Date.now();
+  function L(src,cb){ var e=document.createElement('script'); e.src=src+t;
+    e.onload=cb; e.onerror=cb; document.body.appendChild(e); }
+  L('data.js', function(){ L('app.js'); });
+})();
+</script>
 </body>
 </html>

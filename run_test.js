@@ -34,5 +34,5 @@ const code=fs.readFileSync('data.js','utf8')+'\n'+fs.readFileSync('app.js','utf8
   console.log('\\nMonotonicity violations (expect 0):',bad.length);
 })();
 `;
-const sandbox={window:{},document:{addEventListener:()=>{}},console,Math,Date,Float64Array,Int32Array,Array,Number,String,isFinite,parseFloat,Boolean};
+const sandbox={window:{},document:{addEventListener:()=>{},readyState:'loading'},console,Math,Date,Float64Array,Int32Array,Array,Number,String,isFinite,parseFloat,Boolean};
 vm.createContext(sandbox); vm.runInContext(code,sandbox);
