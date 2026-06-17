@@ -3,8 +3,10 @@ name: Refresh odds
 # refresh.mjs passes its validation gates. The live dashboard then auto-detects
 # the change. Manual run available via "Run workflow".
 on:
-  schedule:
-    - cron: '0 */6 * * *'   # every 6 hours
+  # Manual-only: the scheduled cron is disabled because it scrapes DraftKings/
+  # Yahoo article boards, which would drift the odds away from Sportingbet (the
+  # user's book). Sportingbet's live board isn't scrapeable by a plain runner.
+  # Refresh on demand instead (ask Claude to re-pull Sportingbet), or run this.
   workflow_dispatch:
 permissions:
   contents: write
