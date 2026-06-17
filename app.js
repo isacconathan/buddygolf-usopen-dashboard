@@ -123,10 +123,20 @@ function computeModel(){
   computeSubScores();
 }
 
-/* effective probability for a market: user override > derived model */
+/* effective PROBABILITY for a market (used by sort/filter/engine):
+   user override (stored as decimal odds) > real Sportingbet odds > model. */
 function eff(p, key){
-  if(p.override && p.override[key]!=null) return p.override[key];
+  if(p.override && p.override[key]!=null) return 1/p.override[key];
+  if(p.odds && p.odds[key]!=null) return 1/p.odds[key];
   return p.model ? p.model[key] : null;
+}
+/* effective DECIMAL ODDS for display (Sportingbet system).
+   kind: 'ovr' your odds | 'real' Sportingbet | 'mdl' model-derived | null gap. */
+function oddsDisp(p, key){
+  if(p.override && p.override[key]!=null) return {odds:p.override[key], kind:'ovr'};
+  if(p.odds && p.odds[key]!=null)        return {odds:p.odds[key],     kind:'real'};
+  if(p.model && p.model[key]>0)          return {odds:1/p.model[key],  kind:'mdl'};
+  return {odds:null, kind:null};
 }
 
 /* ---------- sub-scores (0..100) ---------- */
@@ -237,9 +247,10 @@ function render(){
     const tr=document.createElement('tr');
     tr.className=(p.selected?'sel ':'')+(inTeam?'in-team ':'')+(!p.model?'gap ':'');
     const probCell=(key)=>{
-      const v=eff(p,key); if(v==null) return '<td class="t gap-c">—</td>';
-      const ov=p.override&&p.override[key]!=null;
-      return `<td class="t ${ov?'ovr':'mdl'}" title="${ov?'your value':'≈ model-derived'}">${pct(v)}</td>`;
+      const d=oddsDisp(p,key); if(d.odds==null) return '<td class="t gap-c">—</td>';
+      const cls=d.kind==='ovr'?'ovr':d.kind==='real'?'real':'mdl';
+      const title=d.kind==='real'?'real Sportingbet odds':d.kind==='ovr'?'your odds':'≈ model-derived odds';
+      return `<td class="t ${cls}" title="${title}">${d.kind==='mdl'?'≈':''}${d.odds.toFixed(2)}</td>`;
     };
     tr.innerHTML=`
       <td class="rank">${i+1}</td>
@@ -317,18 +328,19 @@ function openDetail(p){
   STATE.players.forEach(x=>x.selected=false); p.selected=true;
   const d=$('#drawer'); d.classList.add('open');
   const m=p.model;
-  const oddsRow=(label,key,real)=>{
-    const isWin = key==='win';
-    const v = isWin ? (p.model?p.model.win:null) : eff(p,key);
-    const ovr = !isWin && p.override && p.override[key]!=null;
-    const realCell = isWin ? (p.odds?.win!=null?dec(p.odds.win):'<span class=gap-c>—</span>')
-                           : (real!=null?dec(real):'<span class=gap-c>—</span>');
-    const input = isWin
+  const oddsRow=(label,key)=>{
+    const d = key==='win'
+      ? {odds:(p.odds&&p.odds.win!=null)?p.odds.win:null, kind:(p.odds&&p.odds.win!=null)?'real':null}
+      : oddsDisp(p,key);
+    const prob = key==='win' ? (p.model?p.model.win:null) : eff(p,key);
+    const oddsTxt = d.odds==null ? '<span class=gap-c>—</span>'
+      : `<span class="${d.kind==='real'?'oreal':d.kind==='ovr'?'oovr':'omdl'}">${d.kind==='mdl'?'≈':''}${d.odds.toFixed(2)}</span>`
+        + (d.kind==='real'?' <small>real</small>':d.kind==='ovr'?' <small>yours</small>':' <small>≈model</small>');
+    const inputVal = (p.override && p.override[key]!=null)?p.override[key]:'';
+    const input = key==='win'
       ? `<input class="ovin" data-k="win" data-odds="1" placeholder="odds e.g.41" value="${p.odds?.win??''}">`
-      : `<input class="ovin" data-k="${key}" placeholder="real %" value="${ovr?(p.override[key]*100):''}">`;
-    return `<tr><td>${label}</td><td>${realCell}</td>
-      <td class="${ovr?'ovr':'mdl'}">${v==null?'—':pct(v)} ${v!=null?`<small>${ovr?'(yours)':'≈model'}</small>`:''}</td>
-      <td>${input}</td></tr>`;
+      : `<input class="ovin" data-k="${key}" placeholder="odds" value="${inputVal}">`;
+    return `<tr><td>${label}</td><td>${oddsTxt}</td><td>${prob==null?'—':pct(prob)}</td><td>${input}</td></tr>`;
   };
   const form=p.form, hist=p.history;
   d.innerHTML=`
@@ -342,12 +354,12 @@ function openDetail(p){
       <h3>📈 Projected BuddyGolf points <span class="hx">${m?num(m.xPts,2):'no model'}</span></h3>
       <p class="fine">Expected points from a ${STATE.sims.toLocaleString()}-sim Plackett-Luce model built on the real win odds, with the 51+ doubling & miss-cut penalty applied.</p>
       <table class="dt">
-        <tr><th>Market</th><th>Real odds</th><th>Probability</th><th>Override (real %)</th></tr>
+        <tr><th>Market</th><th>Sportingbet odds</th><th>Implied %</th><th>Your odds</th></tr>
         ${oddsRow('Win','win')}
-        ${oddsRow('Top 5','top5',p.odds?.top5)}
-        ${oddsRow('Top 10','top10',p.odds?.top10)}
-        ${oddsRow('Top 20','top20',p.odds?.top20)}
-        ${oddsRow('Make cut','makeCut',p.odds?.makeCut)}
+        ${oddsRow('Top 5','top5')}
+        ${oddsRow('Top 10','top10')}
+        ${oddsRow('Top 20','top20')}
+        ${oddsRow('Make cut','makeCut')}
       </table>
       <p class="src">Win odds source: ${p.oddsSrc||'<span class=gap-c>none — value not modelled</span>'}</p>
     </div>
@@ -387,7 +399,7 @@ function openDetail(p){
       flash('Re-simulating field with your odds…'); recalcAll(); openDetail(p); return;
     }
     if(e.target.value===''){ delete p.override[k]; }
-    else if(!Number.isNaN(val)) p.override[k]=Math.min(1,Math.max(0,val/100));
+    else if(!Number.isNaN(val) && val>1) p.override[k]=val;   // store decimal odds (Sportingbet system)
     computeSubScores(); render(); openDetail(p);
   }));
   render();
@@ -417,7 +429,7 @@ async function checkForNewData(manual){
   const cur=window.BG.FIELD_META.oddsCapturedAt;
   if(remote && remote!==cur) showUpdateBanner(remote);
   else if(manual) flash(reachable ? 'Odds are current ('+cur+').'
-    : 'Auto-check works on the hosted site; a local file can’t re-fetch data.js.');
+    : 'This is the local file — open the live site for live odds: isacconathan.github.io/buddygolf-usopen-dashboard');
   updateDataCard(); return remote;
 }
 function showUpdateBanner(remote){
@@ -435,10 +447,14 @@ function setAutoRefresh(on){
 }
 function agoStr(t){ if(!t)return 'not yet'; const s=Math.round((Date.now()-t)/1000);
   return s<60?s+'s ago':Math.round(s/60)+'m ago'; }
+const LIVE_URL = "https://isacconathan.github.io/buddygolf-usopen-dashboard/";
 function updateDataCard(){
   const el=$('#dataInfo'); if(!el) return;
+  const local = location.protocol === 'file:';
   el.innerHTML=`Odds captured <b>${window.BG.FIELD_META.oddsCapturedAt}</b><br>`
-    +`Auto-check ${REFRESH.on?'<b style="color:var(--grn)">on</b>':'<span style="color:var(--mut)">off</span>'} · checked ${agoStr(REFRESH.lastCheck)}`;
+    + (local
+        ? `<span style="color:var(--gold)">ℹ︎ You're viewing a local file — auto-refresh only runs on the <a href="${LIVE_URL}" target="_blank" style="color:var(--grn)">live site ↗</a>.</span>`
+        : `Auto-check ${REFRESH.on?'<b style="color:var(--grn)">on</b>':'<span style="color:var(--mut)">off</span>'} · checked ${agoStr(REFRESH.lastCheck)}`);
 }
 
 /* ---------- wire up ---------- */

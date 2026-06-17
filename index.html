@@ -98,7 +98,7 @@ td.tm{text-align:center;width:30px}td.tm input{accent-color:var(--grn);width:15p
 td.nm{text-align:left;white-space:normal;min-width:180px}
 .pn{font-weight:600}
 .wgr{color:var(--fai)}
-.t.mdl{color:var(--blu)} .t.ovr{color:var(--gold);font-weight:600}
+.t.mdl{color:var(--blu)} .t.ovr{color:var(--gold);font-weight:600} .t.real{color:var(--grn);font-weight:600}
 .t .gap-c,.gap-c{color:#5b6f63}
 .xp{font-weight:700;color:var(--grn)} .xp.neg{color:var(--red)}
 .b2x{display:inline-block;font-size:10px;font-weight:700;color:#1a130a;background:var(--gold);
@@ -128,6 +128,7 @@ table.dt{width:100%;border-collapse:collapse;margin-top:6px;font-size:12.5px}
 table.dt th{color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)}
 table.dt td{padding:5px 6px;border-bottom:1px solid #1b2a22}
 table.dt td.mdl{color:var(--blu)} table.dt td.ovr{color:var(--gold)}
+.oreal{color:var(--grn);font-weight:600} .oovr{color:var(--gold);font-weight:600} .omdl{color:var(--blu)}
 table.dt small{color:var(--mut)}
 .ovin{width:72px;padding:4px 6px;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--gold);font-size:12px}
 
@@ -164,7 +165,7 @@ table.dt small{color:var(--mut)}
     </div>
     <div>
       <div id="meta"></div>
-      <div class="note">Win odds are real &amp; sourced. Top-5/10/20/cut % are <b style="color:var(--blu)">≈ model-derived</b> from those odds (boards weren't machine-readable) — editable per player. Blanks are honest data gaps, never guesses.</div>
+      <div class="note">All odds shown <b>Sportingbet-style (decimal)</b>. Win &amp; a few Top-5 prices are <b style="color:var(--grn)">real Sportingbet</b>; other place odds are <b style="color:var(--blu)">≈ model-derived</b> and editable — paste real ones to override. Blanks are honest gaps.</div>
     </div>
   </header>
 
@@ -258,8 +259,10 @@ table.dt small{color:var(--mut)}
         </table>
       </div>
       <div class="legend">
-        <span><b>blue %</b> = model-derived</span>
-        <span><span style="color:var(--gold)">gold %</span> = your override</span>
+        <span>Top5–cut shown as <b>decimal odds</b> (Sportingbet style)</span>
+        <span><span style="color:var(--grn)">green</span> = real Sportingbet</span>
+        <span><span style="color:var(--blu)">≈ blue</span> = model-derived</span>
+        <span><span style="color:var(--gold)">gold</span> = your odds</span>
         <span><i>2×</i> = 51+ double points</span>
         <span><u>—</u> = data gap (not guessed)</span>
         <span>Proj. pts = expected BuddyGolf points</span>
