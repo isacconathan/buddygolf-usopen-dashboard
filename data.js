@@ -15,7 +15,7 @@ const FIELD_META = {
   note: "BuddyGolf app labels the venue 'Oakmont' but the real 2026 U.S. Open "
       + "is at Shinnecock Hills; course-fit is modelled on Shinnecock per user.",
   oddsPrimarySource: "sportingbet.co.za (event 17704600), cross-checked vs news books",
-  oddsCapturedAt: "2026-06-16 23:13", // when odds were scraped — bump on every refresh
+  oddsCapturedAt: "2026-06-17 13:03", // when odds were scraped — bump on every refresh
   lastUpdated: null, // set when the page loads the data
 };
 
