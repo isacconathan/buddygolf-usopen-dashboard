@@ -767,9 +767,61 @@ function renderConditions(){
   $$('#condBody tr[data-name]').forEach(tr=>tr.addEventListener('click',()=>openDetail(P.find(p=>p.name===tr.dataset.name))));
 }
 
+/* ---------- Ball-Strikers XI: accuracy + (heavier) second-shot play + temperament ---------- */
+function accFromPct(pct){ return pct==null?null:Math.max(0,Math.min(100,(pct-56)/16*100)); }
+function strikerScore(p){
+  const sk=p.skills||{}; if(sk.strikeApp==null) return null;
+  let ws=0,s=0; const add=(w,v)=>{ if(v!=null){s+=w*v;ws+=w;} };
+  add(0.50, sk.strikeApp);           // second-shot play (most important)
+  add(0.30, accFromPct(sk.drvAcc));  // driving accuracy
+  add(0.20, p._tempN);               // big-match temperament
+  return ws? s/ws : null;
+}
+function ordn(n){ const s=['th','st','nd','rd'],v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); }
+function strikerNote(p){
+  const sk=p.skills, b=[];
+  if(sk.sgAppRank!=null&&sk.sgAppRank<=15) b.push('elite second-shot play (SG-App '+ordn(sk.sgAppRank)+(sk.sgAppVal!=null?', '+sk.sgAppVal.toFixed(2):'')+')');
+  else if(sk.strikeApp>=85) b.push('elite iron play');
+  else if(sk.sgAppRank!=null&&sk.sgAppRank<=35) b.push('strong approach play (SG-App '+ordn(sk.sgAppRank)+')');
+  if(sk.drvAcc!=null&&sk.drvAcc>=68) b.push('top-tier accuracy ('+sk.drvAcc.toFixed(1)+'% fairways)');
+  else if(sk.drvAcc!=null&&sk.drvAcc>=66) b.push('accurate driver ('+sk.drvAcc.toFixed(1)+'%)');
+  const mj=(p.history&&p.history.majorsWon)?p.history.majorsWon.length:0;
+  if(mj>=1) b.push(mj+'× major champ — proven temperament');
+  else if(p.history&&p.history.bestUSOpen&&p.history.bestUSOpen.pos<=5) b.push('big-stage pedigree');
+  return b.join(' · ');
+}
+function sgAppCell(sk){
+  if(sk.sgAppRank!=null) return ordn(sk.sgAppRank)+(sk.sgAppVal!=null?' ('+(sk.sgAppVal>0?'+':'')+sk.sgAppVal.toFixed(2)+')':'');
+  if(sk.strikeApp>=85) return 'elite irons <small>(rep)</small>';
+  return '—';
+}
+function renderStrikers(){
+  const el=$('#strikeBody'); if(!el) return;
+  const P=STATE.players;
+  const elig=P.filter(p=>p.model&&p.skills&&p.skills.strikeApp!=null);
+  const nT=normalise(elig.map(majorRaw)); elig.forEach(p=>p._tempN=nT(majorRaw(p)));
+  const ranked=elig.map(p=>({p,s:strikerScore(p)})).filter(r=>r.s!=null).sort((a,b)=>b.s-a.s);
+  const xiNames=ranked.slice(0,12).map(r=>r.p.name);
+  el.innerHTML=`
+    <p class="fine">Built <b>purely on ball-striking</b> for 2026: <b>second-shot play (SG: Approach) weighted heaviest (50%)</b>, then <b>driving accuracy (30%)</b>, with <b>big-match temperament (20%)</b> as the separator — exactly the profile a firm, windy Shinnecock demands. Driving accuracy % is the real CBS 2026 leaderboard; SG-Approach from CBS / PGA Tour profiles (Matsuyama, Fitzpatrick, Im from sourced elite-iron reputation, no exact 2026 SG). The top 12 are your XI.</p>
+    <div style="margin:10px 0"><button class="btn primary" id="loadStrikers" style="max-width:260px">⚡ Load this XI into My 12</button></div>
+    <table class="condt"><thead><tr><th>#</th><th class="l">Player</th><th>Striker</th><th>Driving acc</th><th class="l">SG: Approach</th><th class="l">Why he's in</th></tr></thead><tbody>
+    ${ranked.map((r,i)=>{ const p=r.p, sk=p.skills, inXI=i<12;
+      return `<tr data-name="${p.name.replace(/"/g,'&quot;')}" class="${inXI?'xi':''}"><td class="rank">${inXI?(i+1):''}</td>
+        <td class="l nm"><span class="pn">${p.name}</span>${p.wgr>=51?' <span class="b2x">2×</span>':''}${p.intel&&p.intel.flag==='injury'?' <span class="bnews inj">⚕</span>':''}</td>
+        <td class="fitbig">${Math.round(r.s)}</td>
+        <td>${sk.drvAcc!=null?sk.drvAcc.toFixed(1)+'%':'<span class="mut">—</span>'}</td>
+        <td class="l">${sgAppCell(sk)}</td>
+        <td class="l" style="white-space:normal;max-width:380px"><span class="why2">${strikerNote(p)}</span></td></tr>`;}).join('')}
+    </tbody></table>
+    <p class="fine" style="margin-top:10px">Only players with a verified approach profile are eligible (it's a ball-striking team). Rows below the line are the next-best strikers who just missed the XI. Note: this XI optimises shot-quality, <b>not</b> BuddyGolf value — cross-check with the Leaderboard, since a few elite strikers (e.g. poa putters aside) may be short-odds favourites with −6 miss-cut risk.</p>`;
+  $('#loadStrikers').onclick=()=>{ STATE.team=new Set(xiNames); switchView('team'); flash('Loaded the Ball-Strikers XI into My 12.'); };
+  $$('#strikeBody tr[data-name]').forEach(tr=>tr.addEventListener('click',e=>{ if(e.target.tagName==='BUTTON')return; openDetail(P.find(p=>p.name===tr.dataset.name)); }));
+}
+
 const cap=s=>s[0].toUpperCase()+s.slice(1);
 function switchView(v){
-  ['board','lab','diff','team','cond'].forEach(x=>{
+  ['board','lab','diff','team','cond','strike'].forEach(x=>{
     $('#view'+cap(x)).style.display = v===x?'':'none';
     $('#tab'+cap(x)).classList.toggle('on', v===x);
   });
@@ -778,6 +830,7 @@ function switchView(v){
   else if(v==='diff') renderDifferentials();
   else if(v==='team') renderSquad();
   else if(v==='cond') renderConditions();
+  else if(v==='strike') renderStrikers();
 }
 function updateFmtBtn(){ const b=$('#oddsFmtBtn'); if(b) b.textContent='Odds: '+(STATE.oddsFmt==='dec'?'Decimal':'Fractional'); }
 
@@ -834,6 +887,7 @@ function init(){
   $('#tabDiff').addEventListener('click',()=>switchView('diff'));
   $('#tabTeam').addEventListener('click',()=>switchView('team'));
   $('#tabCond').addEventListener('click',()=>switchView('cond'));
+  $('#tabStrike').addEventListener('click',()=>switchView('strike'));
   $('#oddsFmtBtn').addEventListener('click',()=>{ STATE.oddsFmt=STATE.oddsFmt==='dec'?'frac':'dec'; updateFmtBtn(); render(); });
   updateFmtBtn();
   $('#rerunLab').addEventListener('click',()=>{ STRAT.ran=false; renderStrategyLab();

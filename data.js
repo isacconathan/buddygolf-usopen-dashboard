@@ -483,6 +483,39 @@ const COND2 = {
 for(const k in COND2){ const c=COND2[k]; if(DATA[k]&&DATA[k].skills){ const s=DATA[k].skills;
   if(c.p!=null)s.puttScore=c.p; if(c.f!=null)s.firmScore=c.f; if(c.n)s.fitNote=c.n; } }
 
+/* BALL-STRIKING (2026): real driving accuracy % (CBS leaderboard) + Strokes-Gained
+   Approach ("second shot") rank/value (CBS / PGA Tour profiles). strikeApp = 0-100
+   approach score from verified SG-App rank/value (Matsuyama/Fitzpatrick from sourced
+   elite-iron reputation, flagged). Drives the Ball-Strikers XI. */
+function B(drvAcc, sgAppRank, strikeApp, sgAppVal){
+  return { drvAcc, sgAppRank, strikeApp, sgAppVal:(sgAppVal??null) }; }
+const BALLSTRIKE = {
+  "Collin Morikawa":  B(66.35, 1,  100, 0.847),
+  "Scottie Scheffler":B(null,  17, 84,  0.52),
+  "Russell Henley":   B(71.89, 51, 62,  null),
+  "Aaron Rai":        B(71.13, 17, 82,  0.496),
+  "Si Woo Kim":       B(69.75, 6,  92,  0.690),
+  "Andrew Putnam":    B(69.51, null, null, null),
+  "Tommy Fleetwood":  B(68.48, 44, 66,  null),
+  "Corey Conners":    B(67.54, 38, 72,  null),
+  "Emiliano Grillo":  B(67.54, null, null, null),
+  "Matt Fitzpatrick": B(67.27, null, 82, null),   // 2nd in field tee-to-green (elite iron play)
+  "Viktor Hovland":   B(65.64, null, 68, null),
+  "Max McGreevy":     B(64.70, null, null, null),
+  "J.J. Spaun":       B(64.63, null, null, null),
+  "Ludvig Åberg":     B(null, 11, 87,  0.577),
+  "Sepp Straka":      B(null, 12, 86,  0.571),
+  "Hideki Matsuyama": B(null, null, 90, null),    // elite irons (top-5 from 100y+) — sourced reputation
+  "Cameron Young":    B(null, 23, 78,  0.445),
+  "Xander Schauffele":B(null, 27, 75,  0.389),
+  "Shane Lowry":      B(null, 29, 73,  0.371),
+  "Patrick Cantlay":  B(null, 30, 72,  0.365),
+  "Justin Thomas":    B(null, 72, 45,  0.124),
+  "Robert MacIntyre": B(null, 137, 25, -0.389),
+  "Sungjae Im":       B(null, null, 62, null),    // consistent ball-striker (rep)
+};
+for(const k in BALLSTRIKE){ const b=BALLSTRIKE[k]; if(b&&DATA[k]){ DATA[k].skills=Object.assign(DATA[k].skills||{}, b); } }
+
 /* ---------------------------------------------------------------------
    COMPLETE WIN ODDS — full Sportingbet decimal board (the user's book),
    scraped 2026-06-16 and cross-checked vs DraftKings & Yahoo full-field
