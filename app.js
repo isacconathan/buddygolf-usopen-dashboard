@@ -709,6 +709,7 @@ function condChips(p){
   if(sk.puttScore!=null&&sk.puttScore>=80) c.push('🟢 Pure putter');
   if(f.course!=null&&f.course>=78) c.push('⛳ Shinnecock pedigree');
   if(sk.scrScore!=null&&sk.scrScore>=82) c.push('🧤 Elite short game');
+  if(sk.puttScore!=null&&sk.puttScore<=42 && Math.max(sk.firmScore??0,sk.ballScore??0)>=82) c.push('⚠ poa-putt risk');
   return c;
 }
 const DEEPDIVE = `
@@ -721,7 +722,7 @@ const DEEPDIVE = `
       <li><b>🎯 Driving accuracy.</b> The fescue is penal and kills your spin control — fairways are everything; placement beats power. <i>Edge: Russell Henley (tour-leading 71.9% fairways), Aaron Rai (most fairways in the field), Si Woo Kim.</i></li>
       <li><b>🌬️ Ball-flight & wind control.</b> Flighting irons down, knockdowns, shaping it both ways — true links shotmaking. <i>Edge: Fleetwood, MacIntyre, Lowry, Harman, Spieth, Schauffele.</i></li>
       <li><b>🪁 Firm-green approach play.</b> Holding crowned, baked greens demands elite trajectory and spin control; the best iron players gain the most. <i>Edge: Morikawa (tour-best SG-Approach), Scheffler, Conners, Henley.</i></li>
-      <li><b>🟢 Putting on firm, fast poa.</b> Bumpy afternoon poa-annua greens punish a loose stroke — speed control and a repeating stroke are gold. <span id="ddPutt"><i>Edge: proven poa-annua specialists and elite speed/lag putters who can tame the slopes.</i></span></li>
+      <li><b>🟢 Putting on firm, fast poa.</b> Bumpy afternoon poa-annua greens punish a loose stroke — speed control and a repeating stroke are gold. <span id="ddPutt"><i>Edge: Sam Burns (paces the field in true putting, +0.647), Robert MacIntyre (top-6) &amp; Cameron Smith (renowned poa putter), with Cameron Young hot. The warning: Matt Fitzpatrick's game fits but he's been a poa liability (102nd) — and Morikawa, Conners &amp; Si Woo Kim are elite ball-strikers whose putters could betray them on poa.</i></span></li>
       <li><b>🧤 Scrambling.</b> You <i>will</i> miss these greens; firm turf makes up-and-downs savage, so creativity and nerve matter. <i>Edge: Harman, Cameron Smith, Scheffler (3rd around-the-green).</i></li>
       <li><b>🧠 Temperament & course management.</b> Accept bogeys, grind pars, never bleed. The US Open mental test separates contenders on Sunday. <i>Edge: Koepka, Schauffele, Scheffler.</i></li>
     </ol>
@@ -758,7 +759,7 @@ function renderConditions(){
       return `<tr data-name="${p.name.replace(/"/g,'&quot;')}"><td class="rank">${i+1}</td>
         <td class="l nm"><span class="pn">${p.name}</span>${p.wgr>=51?' <span class="b2x">2×</span>':''}${p.intel&&p.intel.flag==='injury'?' <span class="bnews inj">⚕</span>':''}</td>
         <td class="fitbig">${Math.round(r.fit)}</td>
-        <td class="l"><div class="chips">${chips.map(c=>'<span class="chip2">'+c+'</span>').join('')}</div><div class="why2">${p.skills.fitNote||''}</div></td></tr>`;}).join('')}
+        <td class="l"><div class="chips">${chips.map(c=>'<span class="chip2'+(c.includes('⚠')?' risk':'')+'">'+c+'</span>').join('')}</div><div class="why2">${p.skills.fitNote||''}</div></td></tr>`;}).join('')}
     </tbody></table>
     <p class="fine" style="margin-top:10px">Fit = your weighted blend. <b>🌬️ Wind</b> is an analyst-informed links/wind index (verified Open/links pedigree + sourced previews); <b>🎯 Accuracy</b>, <b>🪁 ball-striking</b> &amp; <b>🟢 putting</b> use real stats/reputation where sourced; <b>⛳ Course</b> from the 2018 Shinnecock result &amp; US Open record. Only players with a researched profile are listed — no blank rows. The chips + note give the sourced reasons.</p>`;
   [['cWind','wind'],['cAcc','acc'],['cBall','ball'],['cPutt','putt'],['cCourse','course'],['cScr','scramble']].forEach(([id,key])=>{

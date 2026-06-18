@@ -455,6 +455,34 @@ const SKILLS = {
 };
 for(const k in SKILLS){ DATA[k]=Object.assign(DATA[k]||{}, SKILLS[k]); }
 
+/* PUTTING & FIRM-GREEN enrichment (2026 SG data / sourced rep — putting agent).
+   p=puttScore, f=firmScore (firm-green ball-striking), n=fitNote override.
+   Shinnecock greens are ~80% POA ANNUA, fast & bumpy — poa putting is an edge,
+   poa weakness a real risk. LIV players are reputation-based (no 2026 SG). */
+const COND2 = {
+  "Scottie Scheffler":{p:66,f:95}, "Rory McIlroy":{p:88,f:85,n:"Strong 2026 putter (top-6/12 on Tour) AND elite ball-striker, wind-tested — the only caution is his MC here in '18."},
+  "Cameron Young":{p:80,f:80}, "Matt Fitzpatrick":{p:35,f:86,n:"Elite ball-striker (2nd in the field tee-to-green) but a documented poa-annua putting weakness (102nd; lost ~6 strokes putting at Riviera) — a real risk on these poa greens."},
+  "Russell Henley":{p:62,f:85}, "Tommy Fleetwood":{p:66,f:82}, "Justin Rose":{p:62}, "Jon Rahm":{p:65,f:86},
+  "Collin Morikawa":{p:38,f:98,n:"Among the most precise iron players alive — tailor-made for firm greens — but a historically unreliable putter is the one hole in his fit."},
+  "Chris Gotterup":{p:72}, "Xander Schauffele":{p:62,f:80}, "Ludvig Åberg":{p:55,f:84},
+  "Aaron Rai":{p:40,f:84,n:"Hits more fairways than anyone in the field and won the '26 PGA on accuracy + precise approaches — but a below-average putter (95th) is the catch on poa."},
+  "Justin Thomas":{p:40,f:60}, "Robert MacIntyre":{p:92,f:42,n:"Proven links/wind winner (Scottish Open, Dunhill Links, T6 Open '19) AND a top-6 Tour putter (+0.685) — elite on poa; the catch is weak irons (137th in approach)."},
+  "Si Woo Kim":{p:38,f:88,n:"Elite irons (6th in SG-Approach) and an accurate driver, but a poor 2026 putter (101st) — the mirror image of MacIntyre."},
+  "Sepp Straka":{p:40,f:85}, "Tyrrell Hatton":{p:70}, "Hideki Matsuyama":{p:60,f:88}, "Patrick Reed":{p:72},
+  "Viktor Hovland":{p:45}, "Sam Burns":{p:92,f:70,n:"Paces the field in true putting (+0.647 SG, ~6th on Tour) — a huge edge on Shinnecock's poa; ball-striking in the wind is the only question."},
+  "Bryson DeChambeau":{p:50}, "Wyndham Clark":{p:60},
+  "Patrick Cantlay":{p:42,f:78,n:"Strong ball-striker (top-10 in the field tee-to-green) but an inconsistent putter — the limiter on these greens."},
+  "Maverick McNealy":{p:84,n:"One of the best short games in the field — top-20 in both putting and around-the-green; the limit is a small links sample."},
+  "Shane Lowry":{p:72,f:78}, "Jason Day":{p:75}, "Adam Scott":{p:58},
+  "Jordan Spieth":{p:80,n:"2017 Open champ and a renowned creative poa putter — an elite wind/links profile; 2026 form is the only worry."},
+  "Corey Conners":{p:38,f:90,n:"Routinely a top-5 ball-striker — the ideal Shinnecock iron profile — but putting is the well-known limiter."},
+  "Brian Harman":{p:78}, "Sungjae Im":{p:60}, "Joaquin Niemann":{p:45}, "Brooks Koepka":{p:42},
+  "Cameron Smith":{p:90,n:"2022 Open champ, the world's best scrambler and a renowned poa-annua putter — tailor-made for these greens."},
+  "Dustin Johnson":{p:50}, "Padraig Harrington":{p:60}, "Graeme McDowell":{p:60}, "Min Woo Lee":{p:55},
+};
+for(const k in COND2){ const c=COND2[k]; if(DATA[k]&&DATA[k].skills){ const s=DATA[k].skills;
+  if(c.p!=null)s.puttScore=c.p; if(c.f!=null)s.firmScore=c.f; if(c.n)s.fitNote=c.n; } }
+
 /* ---------------------------------------------------------------------
    COMPLETE WIN ODDS — full Sportingbet decimal board (the user's book),
    scraped 2026-06-16 and cross-checked vs DraftKings & Yahoo full-field
