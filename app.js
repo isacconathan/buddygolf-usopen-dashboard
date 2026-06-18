@@ -27,6 +27,7 @@ const STATE = {
   applyPenalty: true,
   weights: { value: 70, form: 15, major: 10, course: 5 },
   finish: { win: 12, t5: 11, t10: 9, t20: 4 }, // per-band emphasis for betting-value score
+  cond: { wind: 35, acc: 25, ball: 20, course: 12, scramble: 8 }, // Shinnecock/wind fit weights
   sort: { key: 'pick', dir: -1 },
   filters: { q:'', band:'all', valuePlays:false, hideGaps:false, minCut:0 },
   team: new Set(),
@@ -87,6 +88,7 @@ function buildPlayers(){
       form: d.form || null,             // {last5:[{event,pos}], wins, sgRank, read, src}
       history: d.history || null,       // {majorsWon:[], bestUSOpen, top10s, shinnecock, read, src}
       intel: d.intel || null,           // {text, date, src, flag} colour/news note
+      skills: d.skills || null,         // {accScore,ballScore,scrScore,windScore,fitNote,...}
       override: {},                     // user-pasted real odds {top5:..}
       model: null,                      // filled by computeModel()
     };
@@ -674,9 +676,78 @@ function renderSquad(){
     if(e.target.tagName==='BUTTON')return; openDetail(STATE.players.find(p=>p.name===c.dataset.name)); }));
 }
 
+/* ---------- Course & Conditions fit (Shinnecock in heavy wind) ---------- */
+function fitScoreFromFinish(pos){ return Math.max(35, 100-9*Math.log2(pos)); }
+function fitFactors(p){           // each 0..100 (good) or null. Skills enrich when present.
+  const h=p.history, sk=p.skills||{};
+  let course=null;
+  if(h){ const s=h.sh2018;
+    if(typeof s==='number') course=fitScoreFromFinish(s);
+    else if(s==='field') course=58; else if(s==='MC') course=34;
+    else if(h.bestUSOpen&&h.bestUSOpen.pos) course=fitScoreFromFinish(h.bestUSOpen.pos)*0.85; }
+  let wind=null;
+  if(h){ const openWins=(h.majorsWon||[]).filter(w=>w.name==='Open').length;
+    wind = openWins?92:null; }
+  if(sk.windScore!=null) wind = wind!=null?Math.max(wind,sk.windScore):sk.windScore;
+  return { course, wind,
+           acc: sk.accScore??null, ball: sk.ballScore??null, scramble: sk.scrScore??null };
+}
+function condRaw(p){
+  const f=fitFactors(p), w=STATE.cond;
+  const parts=[['wind',f.wind],['acc',f.acc],['ball',f.ball],['course',f.course],['scramble',f.scramble]];
+  let ws=0,acc=0; parts.forEach(([k,v])=>{ if(v==null)return; acc+=w[k]*v; ws+=w[k]; });
+  return ws? acc/ws : null;
+}
+function condStandouts(p){
+  const f=fitFactors(p), t=[];
+  if(f.wind!=null&&f.wind>=75) t.push('🌬️ Wind/links proven');
+  if(f.ball!=null&&f.ball>=70) t.push('🪁 Elite ball-striker');
+  if(f.acc!=null&&f.acc>=70) t.push('🎯 Accurate driver');
+  if(f.scramble!=null&&f.scramble>=70) t.push('🧤 Strong scrambler');
+  if(f.course!=null&&f.course>=75) t.push('⛳ Shinnecock pedigree');
+  return t;
+}
+function condCell(v){ return v==null?'<td class="mut">—</td>':`<td>${Math.round(v)}</td>`; }
+function renderConditions(){
+  const el=$('#condBody'); if(!el) return;
+  const fc=window.BG.FIELD_META.forecast;
+  const days=fc.days.map(x=>`<div class="wxday"><b>${x.d}</b>
+    <div class="wxw">💨 ${x.wind}</div><div class="wxg">gust ${x.gust} mph</div>
+    <div class="wxm">${x.dir} · ${x.hi}°F · ${x.rain} rain</div></div>`).join('');
+  const sl=(id,key,lab)=>`<div class="srow"><span>${lab}</span>
+    <input type="range" id="${id}" min="0" max="50" value="${STATE.cond[key]}"><b id="${id}v">${STATE.cond[key]}</b></div>`;
+  const P=STATE.players;
+  const rows=P.filter(p=>p.model).map(p=>({p,fit:condRaw(p)})).filter(r=>r.fit!=null)
+    .sort((a,b)=>b.fit-a.fit).slice(0,32);
+  el.innerHTML=`
+    <div class="wxbanner"><div class="wxsum">🌬️ <b>Forecast:</b> ${fc.summary}</div>
+      <div class="wxgrid">${days}</div><div class="src">${fc.src}</div></div>
+    <div class="subpanel" style="max-width:560px">
+      <div class="sublab">⚖️ Fit weights <span class="hint2">what matters most in these conditions</span></div>
+      ${sl('cWind','wind','🌬️ Wind / links pedigree')}
+      ${sl('cAcc','acc','🎯 Driving accuracy')}
+      ${sl('cBall','ball','🪁 Ball-striking (approach)')}
+      ${sl('cCourse','course','⛳ Shinnecock / US Open history')}
+      ${sl('cScr','scramble','🧤 Scrambling')}
+    </div>
+    <table class="difft"><thead><tr><th>#</th><th class="l">Player</th><th>Fit</th><th>Wind</th><th>Acc</th><th>Ball</th><th>Course</th><th>Scr</th><th class="l">Stands out for…</th></tr></thead><tbody>
+    ${rows.map((r,i)=>{ const p=r.p, f=fitFactors(p), tags=condStandouts(p);
+      const note = (p.skills&&p.skills.fitNote)?p.skills.fitNote : (tags.join(' · ')||'<span class="mut">course history only — skill data pending</span>');
+      return `<tr data-name="${p.name.replace(/"/g,'&quot;')}"><td class="rank">${i+1}</td>
+        <td class="l nm"><span class="pn">${p.name}</span>${p.wgr>=51?' <span class="b2x">2×</span>':''}</td>
+        <td class="xp">${Math.round(r.fit)}</td>
+        ${condCell(f.wind)}${condCell(f.acc)}${condCell(f.ball)}${condCell(f.course)}${condCell(f.scramble)}
+        <td class="l" style="white-space:normal;max-width:320px">${note}</td></tr>`;}).join('')}
+    </tbody></table>
+    <p class="fine" style="margin-top:10px">Fit = your weighted blend of the factors. <b>🌬️ Wind</b> is an analyst-informed links/wind fit index (from verified Open/links pedigree + sourced previews); <b>🎯 Acc</b> / <b>🪁 Ball</b> are real stats where sourced (e.g. Henley 71.9% fairways, Morikawa SG-App leader); <b>⛳ Course</b> from the 2018 Shinnecock result &amp; US Open record. Blanks are gaps, not guesses. The <b>"Stands out for…"</b> column gives the sourced reason — crank 🌬️ Wind &amp; 🎯 Accuracy for the brutal forecast.</p>`;
+  [['cWind','wind'],['cAcc','acc'],['cBall','ball'],['cCourse','course'],['cScr','scramble']].forEach(([id,key])=>{
+    const e=$('#'+id); if(!e)return; e.addEventListener('input',()=>{ STATE.cond[key]=+e.value; $('#'+id+'v').textContent=e.value; renderConditions(); }); });
+  $$('#condBody tr[data-name]').forEach(tr=>tr.addEventListener('click',()=>openDetail(P.find(p=>p.name===tr.dataset.name))));
+}
+
 const cap=s=>s[0].toUpperCase()+s.slice(1);
 function switchView(v){
-  ['board','lab','diff','team'].forEach(x=>{
+  ['board','lab','diff','team','cond'].forEach(x=>{
     $('#view'+cap(x)).style.display = v===x?'':'none';
     $('#tab'+cap(x)).classList.toggle('on', v===x);
   });
@@ -684,6 +755,7 @@ function switchView(v){
   else if(v==='lab'){ if(!STRAT.ran){ renderStrategyLab(); setTimeout(()=>{ runStrategyLab(); renderStrategyLab(); },30); } else renderStrategyLab(); }
   else if(v==='diff') renderDifferentials();
   else if(v==='team') renderSquad();
+  else if(v==='cond') renderConditions();
 }
 function updateFmtBtn(){ const b=$('#oddsFmtBtn'); if(b) b.textContent='Odds: '+(STATE.oddsFmt==='dec'?'Decimal':'Fractional'); }
 
@@ -739,6 +811,7 @@ function init(){
   $('#tabLab').addEventListener('click',()=>switchView('lab'));
   $('#tabDiff').addEventListener('click',()=>switchView('diff'));
   $('#tabTeam').addEventListener('click',()=>switchView('team'));
+  $('#tabCond').addEventListener('click',()=>switchView('cond'));
   $('#oddsFmtBtn').addEventListener('click',()=>{ STATE.oddsFmt=STATE.oddsFmt==='dec'?'frac':'dec'; updateFmtBtn(); render(); });
   updateFmtBtn();
   $('#rerunLab').addEventListener('click',()=>{ STRAT.ran=false; renderStrategyLab();

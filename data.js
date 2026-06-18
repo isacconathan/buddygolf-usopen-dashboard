@@ -17,6 +17,16 @@ const FIELD_META = {
   oddsPrimarySource: "sportingbet.co.za (event 17704600), cross-checked vs news books",
   oddsCapturedAt: "2026-06-18 00:35", // when odds were scraped — bump on every refresh
   lastUpdated: null, // set when the page loads the data
+  forecast: {
+    summary: "\"Wind, wind and more wind.\" Thursday is the worst — 22–28 mph sustained with gusts to ~40+ mph — easing through the week. For reference, in 2018's Shinnecock wind NO player broke par for the week. A heavy premium on driving accuracy, ball-flight control and links/wind experience.",
+    src: "Golf Channel / CBS / NBC / Golf.com forecasts (Jun 2026)",
+    days: [
+      { d:"Thu", hi:74, rain:"early", wind:"22–28 mph", gust:"40+", dir:"worst day" },
+      { d:"Fri", hi:73, rain:"0%",     wind:"14–18 mph", gust:"26",  dir:"" },
+      { d:"Sat", hi:73, rain:"0%",     wind:"16–20 mph", gust:"28",  dir:"" },
+      { d:"Sun", hi:71, rain:"0%",     wind:"10–17 mph", gust:"22",  dir:"" },
+    ],
+  },
 };
 
 /* Full field as (WGR, "Surname, First"). 999 = unranked/qualifier.
@@ -376,6 +386,74 @@ const INTEL = {
   "Nico Echavarria": I("Won the Cognizant Classic in March (career-high No. 34).","Mar 2026","Golf Channel"),
 };
 for(const k in INTEL){ DATA[k]=Object.assign(DATA[k]||{}, INTEL[k]); }
+
+/* ---------------------------------------------------------------------
+   COURSE & CONDITIONS SKILLS (Shinnecock in heavy wind) — conditions agent.
+   windScore = analyst-informed wind/links FIT INDEX (0-100) from verified
+   Open/links pedigree + sourced fit verdicts (NOT a raw stat). acc/ball/scr
+   are 0-100 set ONLY where concretely sourced (else null=gap). fitNote =
+   the sourced reason, shown in the UI.
+   --------------------------------------------------------------------- */
+function S(windScore, fitNote, x){ x=x||{};
+  return {skills:{ windScore, fitNote, accScore:x.acc??null, ballScore:x.ball??null,
+    scrScore:x.scr??null, src:"conditions agent (Golf Channel/CBS/ESPN/Wikipedia — per player)" }}; }
+const SKILLS = {
+  "Scottie Scheffler": S(88,"Best all-around ball-striker even in a down year — SG-total leader & 3rd around-the-green; scoring profile a perfect Shinnecock fit.",{ball:82,scr:90}),
+  "Rory McIlroy": S(84,"Elite ball-striker, wind-tested, multiple Shinnecock scouting trips — but MC'd here in '18, the one caution.",{ball:86}),
+  "Cameron Young": S(78,"2022 Open runner-up at St Andrews; bombs it with genuine links pedigree.",{}),
+  "Matt Fitzpatrick": S(74,"Precision/accuracy game suits a US Open; 2022 US Open champ — recent form the question.",{acc:80}),
+  "Russell Henley": S(88,"Tour-leading driving accuracy (71.9%) plus elite approach — the accuracy/precision archetype for Shinnecock; led Round 1 here in '18.",{acc:96,ball:88}),
+  "Tommy Fleetwood": S(93,"Proven Shinnecock & links wind performer — solo 2nd here in '18 and 2019 Open runner-up.",{}),
+  "Justin Rose": S(76,"Veteran tough-conditions player with a long, strong links record.",{}),
+  "Jon Rahm": S(88,"Elite ball-striking and short game with real links experience; 2021 US Open champ, '26 PGA runner-up.",{ball:86}),
+  "J.J. Spaun": S(55,"Defending-champ context, but his links/wind record is unproven.",{}),
+  "Collin Morikawa": S(90,"Tour-best iron play (leads SG-Approach, +0.847) and a 2021 Open champ — gold standard for firm, windy greens.",{ball:98}),
+  "Chris Gotterup": S(80,"2025 Genesis Scottish Open champ (beat McIlroy) — a verified links title, with length and form.",{}),
+  "Xander Schauffele": S(90,"2024 Open champ, T3 US Open '19, never finished outside the top-15 at a US Open — major-tough and wind-tested.",{}),
+  "Ludvig Åberg": S(74,"Elite ball-striker; links sample still small (T8 Scottish '25).",{ball:82}),
+  "Aaron Rai": S(88,"Hits more fairways than anyone in the field and won the '26 PGA on accuracy + precise approaches — pure accuracy archetype.",{acc:94,ball:84}),
+  "Ben Griffin": S(50,"Wind/links fit unverified.",{}),
+  "Justin Thomas": S(42,"Weak links record — no Open top-10 in five starts; ball-striking talent only partly offsets that in heavy wind.",{ball:80}),
+  "Robert MacIntyre": S(92,"Scottish Open & Dunhill Links champ and T6 Open '19 — a proven links/wind winner raised on it.",{}),
+  "Si Woo Kim": S(64,"Accurate driver (3rd in fairways, ~69.8%); links record unproven.",{acc:86}),
+  "Sepp Straka": S(82,"2023 Open runner-up — his best major came on a links.",{}),
+  "Alex Noren": S(76,"Links-seasoned European veteran.",{}),
+  "Tyrrell Hatton": S(84,"Proven wind player; T5 Open '16 with a deep DP World/links pedigree.",{}),
+  "Harris English": S(50,"Wind/links fit unverified.",{}),
+  "Ryan Gerard": S(50,"Wind/links fit unverified.",{}),
+  "Hideki Matsuyama": S(72,"World-class iron player; links record light but ball-striking travels in wind.",{ball:85}),
+  "Patrick Reed": S(78,"Solo 4th here at Shinnecock in '18 — proven in this exact wind.",{}),
+  "Viktor Hovland": S(60,"Streaky; around-the-green has historically been a weakness — a concern when scrambling in tough conditions.",{scr:40}),
+  "Akshay Bhatia": S(48,"Wind/links fit unproven; off-the-tee a current worry.",{}),
+  "Sam Burns": S(52,"Solid recent US Open record but links/wind fit unverified.",{}),
+  "Kurt Kitayama": S(55,"Decent driver; has missed his last four US Open cuts.",{}),
+  "Bryson DeChambeau": S(70,"Two-time US Open champ (2020, 2024); power game with wind the swing factor.",{}),
+  "Nicolai Højgaard": S(52,"In good form but links/wind fit unverified.",{}),
+  "Wyndham Clark": S(70,"2023 US Open champ — major-tested.",{}),
+  "Min Woo Lee": S(55,"Modest links record (best Open T21).",{}),
+  "Patrick Cantlay": S(68,"Strong all-around game; links record modest.",{}),
+  "Maverick McNealy": S(60,"Accurate, but a limited links sample (best major T23 Open '25).",{}),
+  "Keegan Bradley": S(48,"Poor 2026 form going in.",{}),
+  "Rickie Fowler": S(78,"T2 Open '14 with a strong links history — a good wind player; form the question.",{}),
+  "Shane Lowry": S(95,"Won the 2019 Open at Portrush in brutal wind and rain — the field's premier heavy-weather player.",{}),
+  "Gary Woodland": S(68,"2019 US Open champ.",{}),
+  "Jason Day": S(72,"Former World No.1 with a solid links record.",{}),
+  "Adam Scott": S(84,"2012 Open runner-up — a seasoned, long links contender.",{}),
+  "Jordan Spieth": S(90,"2017 Open champ with multiple top-5 Opens — an elite, creative wind player.",{}),
+  "Corey Conners": S(80,"Elite ball-striker / iron player — the ideal Shinnecock profile; 2026 form the only question.",{ball:88}),
+  "Brian Harman": S(93,"2023 Open champ (by six) and a premier wind/links scrambler with a deadly short game.",{scr:86}),
+  "Sungjae Im": S(70,"Steady iron player; T7 Open '24.",{}),
+  "Joaquin Niemann": S(50,"Links record unproven despite LIV dominance.",{}),
+  "Brooks Koepka": S(94,"WON the 2018 US Open here in the wind — defending-style course history; major-tough, low-ball winner.",{}),
+  "Cameron Smith": S(92,"2022 Open champ and an elite links/wind player & wedge artist.",{scr:88}),
+  "Dustin Johnson": S(55,"2016 US Open champ but no top-20 in his last 11 majors — pedigree vs cold form.",{}),
+  "Sahith Theegala": S(50,"Wind/links fit unverified; limited starts.",{}),
+  "Keith Mitchell": S(52,"Accurate-ish driver but links fit unverified.",{}),
+  "Ryan Fox": S(72,"Links-raised (NZ) with a solid links background (best Open T25).",{}),
+  "Padraig Harrington": S(90,"Two-time Open champ (2007–08) and a wind/links master — age the only caveat.",{}),
+  "Graeme McDowell": S(82,"2010 US Open champ and a Portrush links member — a renowned wind/links grinder; current form N/A.",{}),
+};
+for(const k in SKILLS){ DATA[k]=Object.assign(DATA[k]||{}, SKILLS[k]); }
 
 /* ---------------------------------------------------------------------
    COMPLETE WIN ODDS — full Sportingbet decimal board (the user's book),
