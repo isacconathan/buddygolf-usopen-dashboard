@@ -27,7 +27,7 @@ const STATE = {
   applyPenalty: true,
   weights: { value: 70, form: 15, major: 10, course: 5 },
   finish: { win: 12, t5: 11, t10: 9, t20: 4 }, // per-band emphasis for betting-value score
-  cond: { wind: 35, acc: 25, ball: 20, course: 12, scramble: 8 }, // Shinnecock/wind fit weights
+  cond: { wind: 28, acc: 22, ball: 20, putt: 14, course: 9, scramble: 7 }, // Shinnecock/wind fit weights
   sort: { key: 'pick', dir: -1 },
   filters: { q:'', band:'all', valuePlays:false, hideGaps:false, minCut:0 },
   team: new Set(),
@@ -689,58 +689,79 @@ function fitFactors(p){           // each 0..100 (good) or null. Skills enrich w
   if(h){ const openWins=(h.majorsWon||[]).filter(w=>w.name==='Open').length;
     wind = openWins?92:null; }
   if(sk.windScore!=null) wind = wind!=null?Math.max(wind,sk.windScore):sk.windScore;
-  return { course, wind,
-           acc: sk.accScore??null, ball: sk.ballScore??null, scramble: sk.scrScore??null };
+  // firm-green control folds into ball-striking (approach)
+  const ball = sk.firmScore!=null && sk.ballScore!=null ? Math.max(sk.ballScore,sk.firmScore)
+             : (sk.ballScore ?? sk.firmScore ?? null);
+  return { course, wind, acc: sk.accScore??null, ball, scramble: sk.scrScore??null, putt: sk.puttScore??null };
 }
 function condRaw(p){
   const f=fitFactors(p), w=STATE.cond;
-  const parts=[['wind',f.wind],['acc',f.acc],['ball',f.ball],['course',f.course],['scramble',f.scramble]];
+  const parts=[['wind',f.wind],['acc',f.acc],['ball',f.ball],['putt',f.putt],['course',f.course],['scramble',f.scramble]];
   let ws=0,acc=0; parts.forEach(([k,v])=>{ if(v==null)return; acc+=w[k]*v; ws+=w[k]; });
   return ws? acc/ws : null;
 }
-function condStandouts(p){
-  const f=fitFactors(p), t=[];
-  if(f.wind!=null&&f.wind>=75) t.push('🌬️ Wind/links proven');
-  if(f.ball!=null&&f.ball>=70) t.push('🪁 Elite ball-striker');
-  if(f.acc!=null&&f.acc>=70) t.push('🎯 Accurate driver');
-  if(f.scramble!=null&&f.scramble>=70) t.push('🧤 Strong scrambler');
-  if(f.course!=null&&f.course>=75) t.push('⛳ Shinnecock pedigree');
-  return t;
+function condChips(p){
+  const f=fitFactors(p), sk=p.skills||{}, c=[];
+  if(f.wind!=null&&f.wind>=82) c.push('🌬️ Wind/links');
+  if(sk.accScore!=null&&sk.accScore>=82) c.push('🎯 Elite accuracy');
+  if(sk.ballScore!=null&&sk.ballScore>=82) c.push('🪁 Pure ball-striker');
+  if(sk.firmScore!=null&&sk.firmScore>=80) c.push('🎯 Firm-green control');
+  if(sk.puttScore!=null&&sk.puttScore>=80) c.push('🟢 Pure putter');
+  if(f.course!=null&&f.course>=78) c.push('⛳ Shinnecock pedigree');
+  if(sk.scrScore!=null&&sk.scrScore>=82) c.push('🧤 Elite short game');
+  return c;
 }
-function condCell(v){ return v==null?'<td class="mut">—</td>':`<td>${Math.round(v)}</td>`; }
+const DEEPDIVE = `
+  <div class="deepdive">
+    <h3>📋 The deep dive — what it takes to win at Shinnecock in this wind</h3>
+    <p><b>The course.</b> Shinnecock Hills is a par-70, treeless, wind-exposed links-style test on the eastern tip of Long Island — one of the hardest setups in golf. Wide bands of penal fescue frame firm, crowned, severely tilted greens that <i>repel</i> anything not flighted and spun correctly. It rewards position, control and patience over raw power. In the 2018 wind here, <b>not a single player broke par for the week.</b></p>
+    <p><b>The conditions.</b> Sustained 20–28 mph wind gusting to ~40 mph (Thursday the worst), shifting direction daily. As the sun bakes the poa-annua greens through the afternoon they turn <b>firm, fast and bumpy</b> — making it brutal to hold approaches and to hole putts. Even par will be in the mix.</p>
+    <h4>The skills that separate the field</h4>
+    <ol class="ddlist">
+      <li><b>🎯 Driving accuracy.</b> The fescue is penal and kills your spin control — fairways are everything; placement beats power. <i>Edge: Russell Henley (tour-leading 71.9% fairways), Aaron Rai (most fairways in the field), Si Woo Kim.</i></li>
+      <li><b>🌬️ Ball-flight & wind control.</b> Flighting irons down, knockdowns, shaping it both ways — true links shotmaking. <i>Edge: Fleetwood, MacIntyre, Lowry, Harman, Spieth, Schauffele.</i></li>
+      <li><b>🪁 Firm-green approach play.</b> Holding crowned, baked greens demands elite trajectory and spin control; the best iron players gain the most. <i>Edge: Morikawa (tour-best SG-Approach), Scheffler, Conners, Henley.</i></li>
+      <li><b>🟢 Putting on firm, fast poa.</b> Bumpy afternoon poa-annua greens punish a loose stroke — speed control and a repeating stroke are gold. <span id="ddPutt"><i>Edge: proven poa-annua specialists and elite speed/lag putters who can tame the slopes.</i></span></li>
+      <li><b>🧤 Scrambling.</b> You <i>will</i> miss these greens; firm turf makes up-and-downs savage, so creativity and nerve matter. <i>Edge: Harman, Cameron Smith, Scheffler (3rd around-the-green).</i></li>
+      <li><b>🧠 Temperament & course management.</b> Accept bogeys, grind pars, never bleed. The US Open mental test separates contenders on Sunday. <i>Edge: Koepka, Schauffele, Scheffler.</i></li>
+    </ol>
+    <p><b>The winning archetype.</b> An accurate, wind-tested ball-striker who flights and controls the ball, holds firm greens, scrambles with imagination and stays patient — the classic Open-champion / elite-iron-player profile. A bomber can win only with world-class wedges and recovery. That's why the board below leans to links pedigree + ball-striking over raw distance.</p>
+  </div>`;
 function renderConditions(){
   const el=$('#condBody'); if(!el) return;
   const fc=window.BG.FIELD_META.forecast;
   const days=fc.days.map(x=>`<div class="wxday"><b>${x.d}</b>
     <div class="wxw">💨 ${x.wind}</div><div class="wxg">gust ${x.gust} mph</div>
-    <div class="wxm">${x.dir} · ${x.hi}°F · ${x.rain} rain</div></div>`).join('');
+    <div class="wxm">${x.hi}°F · ${x.rain}${x.dir?(' · '+x.dir):''}</div></div>`).join('');
   const sl=(id,key,lab)=>`<div class="srow"><span>${lab}</span>
     <input type="range" id="${id}" min="0" max="50" value="${STATE.cond[key]}"><b id="${id}v">${STATE.cond[key]}</b></div>`;
   const P=STATE.players;
-  const rows=P.filter(p=>p.model).map(p=>({p,fit:condRaw(p)})).filter(r=>r.fit!=null)
-    .sort((a,b)=>b.fit-a.fit).slice(0,32);
+  // only researched players appear (those with a real fit profile) — no blank rows
+  const rows=P.filter(p=>p.model&&p.skills).map(p=>({p,fit:condRaw(p)})).filter(r=>r.fit!=null)
+    .sort((a,b)=>b.fit-a.fit);
   el.innerHTML=`
     <div class="wxbanner"><div class="wxsum">🌬️ <b>Forecast:</b> ${fc.summary}</div>
       <div class="wxgrid">${days}</div><div class="src">${fc.src}</div></div>
-    <div class="subpanel" style="max-width:560px">
-      <div class="sublab">⚖️ Fit weights <span class="hint2">what matters most in these conditions</span></div>
+    ${DEEPDIVE}
+    <div class="subpanel" style="max-width:580px">
+      <div class="sublab">⚖️ Fit weights <span class="hint2">tune what matters most in these conditions</span></div>
       ${sl('cWind','wind','🌬️ Wind / links pedigree')}
       ${sl('cAcc','acc','🎯 Driving accuracy')}
-      ${sl('cBall','ball','🪁 Ball-striking (approach)')}
+      ${sl('cBall','ball','🪁 Ball-striking / firm greens')}
+      ${sl('cPutt','putt','🟢 Putting (firm/fast)')}
       ${sl('cCourse','course','⛳ Shinnecock / US Open history')}
       ${sl('cScr','scramble','🧤 Scrambling')}
     </div>
-    <table class="difft"><thead><tr><th>#</th><th class="l">Player</th><th>Fit</th><th>Wind</th><th>Acc</th><th>Ball</th><th>Course</th><th>Scr</th><th class="l">Stands out for…</th></tr></thead><tbody>
-    ${rows.map((r,i)=>{ const p=r.p, f=fitFactors(p), tags=condStandouts(p);
-      const note = (p.skills&&p.skills.fitNote)?p.skills.fitNote : (tags.join(' · ')||'<span class="mut">course history only — skill data pending</span>');
+    <h4 style="margin:6px 0 4px">🏌️ Best fits for Shinnecock in the wind</h4>
+    <table class="condt"><thead><tr><th>#</th><th class="l">Player</th><th>Fit</th><th class="l">Why he fits — the standout aspects of his game</th></tr></thead><tbody>
+    ${rows.map((r,i)=>{ const p=r.p, chips=condChips(p);
       return `<tr data-name="${p.name.replace(/"/g,'&quot;')}"><td class="rank">${i+1}</td>
-        <td class="l nm"><span class="pn">${p.name}</span>${p.wgr>=51?' <span class="b2x">2×</span>':''}</td>
-        <td class="xp">${Math.round(r.fit)}</td>
-        ${condCell(f.wind)}${condCell(f.acc)}${condCell(f.ball)}${condCell(f.course)}${condCell(f.scramble)}
-        <td class="l" style="white-space:normal;max-width:320px">${note}</td></tr>`;}).join('')}
+        <td class="l nm"><span class="pn">${p.name}</span>${p.wgr>=51?' <span class="b2x">2×</span>':''}${p.intel&&p.intel.flag==='injury'?' <span class="bnews inj">⚕</span>':''}</td>
+        <td class="fitbig">${Math.round(r.fit)}</td>
+        <td class="l"><div class="chips">${chips.map(c=>'<span class="chip2">'+c+'</span>').join('')}</div><div class="why2">${p.skills.fitNote||''}</div></td></tr>`;}).join('')}
     </tbody></table>
-    <p class="fine" style="margin-top:10px">Fit = your weighted blend of the factors. <b>🌬️ Wind</b> is an analyst-informed links/wind fit index (from verified Open/links pedigree + sourced previews); <b>🎯 Acc</b> / <b>🪁 Ball</b> are real stats where sourced (e.g. Henley 71.9% fairways, Morikawa SG-App leader); <b>⛳ Course</b> from the 2018 Shinnecock result &amp; US Open record. Blanks are gaps, not guesses. The <b>"Stands out for…"</b> column gives the sourced reason — crank 🌬️ Wind &amp; 🎯 Accuracy for the brutal forecast.</p>`;
-  [['cWind','wind'],['cAcc','acc'],['cBall','ball'],['cCourse','course'],['cScr','scramble']].forEach(([id,key])=>{
+    <p class="fine" style="margin-top:10px">Fit = your weighted blend. <b>🌬️ Wind</b> is an analyst-informed links/wind index (verified Open/links pedigree + sourced previews); <b>🎯 Accuracy</b>, <b>🪁 ball-striking</b> &amp; <b>🟢 putting</b> use real stats/reputation where sourced; <b>⛳ Course</b> from the 2018 Shinnecock result &amp; US Open record. Only players with a researched profile are listed — no blank rows. The chips + note give the sourced reasons.</p>`;
+  [['cWind','wind'],['cAcc','acc'],['cBall','ball'],['cPutt','putt'],['cCourse','course'],['cScr','scramble']].forEach(([id,key])=>{
     const e=$('#'+id); if(!e)return; e.addEventListener('input',()=>{ STATE.cond[key]=+e.value; $('#'+id+'v').textContent=e.value; renderConditions(); }); });
   $$('#condBody tr[data-name]').forEach(tr=>tr.addEventListener('click',()=>openDetail(P.find(p=>p.name===tr.dataset.name))));
 }
